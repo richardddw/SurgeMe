@@ -33,15 +33,15 @@ jobs:
         id: ramdisk
         run: |
           echo "build_dir=previous-build-${{ github.run_id }}-${{ github.run_number }}" >> $GITHUB_OUTPUT
-      #- name: Download Previous Build
-       # uses: actions/checkout@v4
-       # with:
-       #   repository: SukkaLab/ruleset.skk.moe
-       #   persist-credentials: false
-       #   filter: "tree:0" # we don't care about git history here
-       #   fetch-tags: false
-        #  path: ${{ steps.ramdisk.outputs.build_dir }}
-        #  token: ${{ secrets.GIT_TOKEN }}
+      - name: Download Previous Build
+        uses: actions/checkout@v4
+        with:
+          repository: SukkaLab/ruleset.skk.moe
+          persist-credentials: false
+          filter: "tree:0" # we don't care about git history here
+          fetch-tags: false
+          path: ${{ steps.ramdisk.outputs.build_dir }}
+          token: ${{ secrets.FULL_AUTH }}
       - name: Setup build folder
         run: |
           if [ ! -d ${{ steps.ramdisk.outputs.build_dir }}/.git ]; then
@@ -223,4 +223,4 @@ jobs:
         env:
           GH_EMAIL: ${{ secrets.GIT_EMAIL }}
           GH_USER: ${{ secrets.GIT_USER }}
-          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
+          GH_TOKEN: ${{ secrets.FULL_AUTH }}
