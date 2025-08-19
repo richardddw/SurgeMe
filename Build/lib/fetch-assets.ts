@@ -46,7 +46,11 @@ export async function fetchAssets(
     if (filterAdGuardUnsupportedLines) {
       stream = stream.pipeThrough(new AdGuardFilterIgnoreUnsupportedLinesStream());
     }
-    const arr = await Array.fromAsync(stream);
+    //const arr = await Array.fromAsync(stream);
+    const arr = [];
+    for await (const item of stream) {
+      arr.push(item);
+    }
 
     if (arr.length < 1 && !allowEmpty) {
       throw new ResponseError(res, url, 'empty response w/o 304');
