@@ -22,9 +22,9 @@ export const downloadPreviousBuild = task(require.main === module, __filename)(a
   }
 
   // we uses actions/checkout to download the previous build now, so we should throw if the directory is empty
- // if (isCI) {
-  //  throw new Error('CI environment detected, but public directory is empty');
- // }
+  if (isCI) {
+    throw new Error('CI environment detected, but public directory is empty');
+  }
 
   const tarGzUrl = await span.traceChildAsync('get tar.gz url', async () => {
     const resp = await requestWithLog(GITHUB_CODELOAD_URL, { method: 'HEAD' });
