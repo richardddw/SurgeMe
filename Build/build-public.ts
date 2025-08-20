@@ -37,18 +37,27 @@ const closedRootFolders = [
   'Internal'
 ];
 
-async function copyDirContents(srcDir: string, destDir: string, promises: Array<Promise<VoidOrVoidArray>> = []): Promise<Array<Promise<VoidOrVoidArray>>> {
-  for await (const entry of await fsp.opendir(srcDir)) {
-    const src = path.join(srcDir, entry.name);
-    const dest = path.join(destDir, entry.name);
+// ensure viewable config files have .txt copies so Render serves them as text
+const viewableConfigExts = ['.conf', '.toml', '.yaml', '.yml'];
+
+async function createTextCopies(dir: string) {
+  for await (const entry of await fsp.opendir(dir)) {
+    const src = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      console.warn(picocolors.red('[build public] cant copy directory'), src);
-    } else {
-      promises.push(fsp.copyFile(src, dest, fs.constants.COPYFILE_FICLONE));
+      await createTextCopies(src);
+      continue;
+    }
+    const ext = path.extname(entry.name).toLowerCase();
+    if (viewableConfigExts.includes(ext)) {
+      const dest = src + '.txt';
+      try {
+        await fsp.access(dest); // already exists -> skip
+      } catch {
+        // copy original to a .txt companion so it's served as text/plain by hosting
+        await fsp.copyFile(src, dest);
+      }
     }
   }
-
-  return promises;
 }
 
 export const buildPublic = task(require.main === module, __filename)(async (span) => {
@@ -64,6 +73,9 @@ export const buildPublic = task(require.main === module, __filename)(async (span
     await Promise.all(p);
   });
 
+  // create .txt copies for viewable config files so Render serves them as plain text
+  await createTextCopies(PUBLIC_DIR);
+
   const html = await span
     .traceChild('generate index.html')
     .traceAsyncFn(() => treeDir(PUBLIC_DIR).then(generateHtml));
@@ -77,7 +89,12 @@ export const buildPublic = task(require.main === module, __filename)(async (span
         'https://:project.pages.dev/*',
         '  X-Robots-Tag: noindex',
         ...Object.keys(priorityOrder)
-          .map((name) => `/${name}/*\n  content-type: text/plain; charset=utf-8\n  X-Robots-Tag: noindex`)
+          .map((name) => `/${name}/*\n  content-type: text/plain; charset=utf-8\n  X-Robots-Tag: noindex`),
+        // ensure common config file extensions are served as plain text (open in browser)
+        '/*.conf\n  content-type: text/plain; charset=utf-8\n  X-Robots-Tag: noindex',
+        '/*.toml\n  content-type: text/plain; charset=utf-8\n  X-Robots-Tag: noindex',
+        '/*.yaml\n  content-type: text/plain; charset=utf-8\n  X-Robots-Tag: noindex',
+        '/*.yml\n  content-type: text/plain; charset=utf-8\n  X-Robots-Tag: noindex'
       ],
       path.join(PUBLIC_DIR, '_headers')
     ),
@@ -127,8 +144,11 @@ function treeHtml(tree: TreeTypeArray, level = 0, closedFolderList: string[] = [
         </li>
       `;
     } else if (/* entry.type === 'file' && */ !entry.name.endsWith('.html') && !entry.name.startsWith('_')) {
+      // if file is a viewable config, link to the .txt companion so browser opens it
+      const ext = path.extname(entry.name).toLowerCase();
+      const href = viewableConfigExts.includes(ext) ? `${entry.path}.txt` : entry.path;
       result += html`
-        <li class="file"><a class="file-link" href="${entry.path}">${entry.name}</a></li>
+        <li class="file"><a class="file-link" href="${href}">${entry.name}</a></li>
       `;
     }
   }
@@ -142,7 +162,7 @@ function generateHtml(tree: TreeTypeArray) {
 
       <head>
         <meta charset="utf-8">
-        <title>Surge Ruleset Server | Sukka (@SukkaW)</title>
+        <title>Surge Ruleset Server For DDW</title>
         <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
         <link href="https://cdn.skk.moe/favicon.ico" rel="icon" type="image/ico">
         <link href="https://cdn.skk.moe/favicon/apple-touch-icon.png" rel="apple-touch-icon" sizes="180x180">
@@ -709,7 +729,7 @@ function generateHtml(tree: TreeTypeArray) {
       </head>
       <body>
         <main class="container">
-          <h1>Sukka Ruleset Server</h1>
+          <h1>DuDuWa Ruleset Server</h1>
           <p>
             Made by <a href="https://skk.moe">Sukka</a> | <a href="https://github.com/SukkaW/Surge/">Source @ GitHub</a> | Licensed under <a href="/LICENSE" target="_blank">AGPL-3.0</a>
           </p>
