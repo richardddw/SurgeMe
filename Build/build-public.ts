@@ -13,6 +13,10 @@ import picocolors from 'picocolors';
 import { tagged as html } from 'foxts/tagged';
 import { compareAndWriteFile } from './lib/create-file';
 
+// 将输出目录改为仓库的 public/ 子目录（原来可能指向仓库根）
+const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
+fs.mkdirSync(PUBLIC_DIR, { recursive: true });
+
 const priorityOrder: Record<'default' | string & {}, number> = {
   LICENSE: 0,
   domainset: 10,
