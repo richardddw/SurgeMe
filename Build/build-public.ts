@@ -60,6 +60,29 @@ async function createTextCopies(dir: string) {
   }
 }
 
+// helper: 递归复制 src 目录下的所有条目到 dest（只复制内容，不包含 src 根目录本身）
+async function copyDirContents(src: string, dest: string): Promise<void> {
+  await fsp.mkdir(dest, { recursive: true });
+  for await (const entry of await fsp.opendir(src)) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      await copyDirContents(srcPath, destPath);
+    } else if (entry.isFile()) {
+      // 保持模式，直接覆盖
+      await fsp.copyFile(srcPath, destPath);
+    } else if (entry.isSymbolicLink()) {
+      try {
+        const linkTarget = await fsp.readlink(srcPath);
+        try { await fsp.unlink(destPath); } catch {}
+        await fsp.symlink(linkTarget, destPath);
+      } catch {
+        // 忽略不可复制的符号链接
+      }
+    }
+  }
+}
+
 export const buildPublic = task(require.main === module, __filename)(async (span) => {
   await span.traceChildAsync('copy rest of the files', async () => {
     const p: Array<Promise<any>> = [];
