@@ -189,7 +189,7 @@ function generateHtml(tree: TreeTypeArray) {
 
       <head>
         <meta charset="utf-8">
-        <title>Surge Ruleset Server For DDW</title>
+        <title>DDW Ruleset Server</title>
         <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
         <link href="https://cdn.skk.moe/favicon.ico" rel="icon" type="image/ico">
         <link href="https://cdn.skk.moe/favicon/apple-touch-icon.png" rel="apple-touch-icon" sizes="180x180">
@@ -758,7 +758,7 @@ function generateHtml(tree: TreeTypeArray) {
         <main class="container">
           <h1>DuDuWa Ruleset Server</h1>
           <p>
-            Made by <a href="https://skk.moe">Sukka</a> | <a href="https://github.com/SukkaW/Surge/">Source @ GitHub</a> | Licensed under <a href="/LICENSE" target="_blank">AGPL-3.0</a>
+            Mirror to <a href="https://skk.moe">Sukka</a> | <a href="https://github.com/SukkaW/Surge/">Source @ GitHub</a> | Licensed under <a href="/LICENSE" target="_blank">AGPL-3.0</a>
           </p>
           <p>Last Build: ${new Date().toISOString()}</p>
           <br>
