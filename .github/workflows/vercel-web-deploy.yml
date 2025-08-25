@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - master  # 或你主要开发分支的名字
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+env:
+  TZ: Asia/Shanghai
 
 jobs:
   build:
