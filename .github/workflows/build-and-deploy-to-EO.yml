@@ -1,0 +1,41 @@
+name: Build and Deploy to EO Branch
+
+on:
+  push:
+    branches:
+      - DDW-custom  # 或你主要开发分支的名字
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Surge Rules
+        run: pnpm run build
+
+      - name: Deploy public/ to Vercel Branch
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: EO-publish
+          force_orphan: true
