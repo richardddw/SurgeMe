@@ -12,12 +12,20 @@ import { requestWithLog } from './lib/fetch-retry';
 import { isDirectoryEmptySync } from './lib/misc';
 import { isCI } from 'ci-info';
 
-const GITHUB_CODELOAD_URL =
-  'https://codeload.github.com/sukkalab/ruleset.skk.moe/tar.gz/master';
-const GITLAB_CODELOAD_URL =
-  'https://gitlab.com/SukkaW/ruleset.skk.moe/-/archive/master/ruleset.skk.moe-master.tar.gz';
+const GITHUB_CODELOAD_URL = 'https://codeload.github.com/sukkalab/ruleset.skk.moe/tar.gz/master';
+const GITLAB_CODELOAD_URL = 'https://gitlab.com/SukkaW/ruleset.skk.moe/-/archive/master/ruleset.skk.moe-master.tar.gz';
 
-async function tryDownloadPreviousBuild(span: any) {
+export const downloadPreviousBuild = task(require.main === module, __filename)(async (span) => {
+  if (fs.existsSync(PUBLIC_DIR) && !isDirectoryEmptySync(PUBLIC_DIR)) {
+    console.log(picocolors.blue('Public directory exists, skip downloading previous build'));
+    return;
+  }
+
+  // we uses actions/checkout to download the previous build now, so we should throw if the directory is empty
+  //if (isCI) {
+  //  throw new Error('CI environment detected, but public directory is empty');
+  //}
+
   const tarGzUrl = await span.traceChildAsync('get tar.gz url', async () => {
     const resp = await requestWithLog(GITHUB_CODELOAD_URL, { method: 'HEAD' });
     if (resp.statusCode !== 200) {
@@ -28,15 +36,17 @@ async function tryDownloadPreviousBuild(span: any) {
     return GITHUB_CODELOAD_URL;
   });
 
-  return span.traceChildAsync('download & extract previous build', async () => {
-    const respBody = await undici.pipeline(
+  return span.traceChildAsync('download & extract previoud build', async () => {
+    const respBody = undici.pipeline(
       tarGzUrl,
       {
         method: 'GET',
         headers: {
           'User-Agent': 'curl/8.12.1',
-          'sec-fetch-mode': 'same-origin',
-        },
+          // https://github.com/unjs/giget/issues/97
+          // https://gitlab.com/gitlab-org/gitlab/-/commit/50c11f278d18fe1f3fb12eb595067216bb58ade2
+          'sec-fetch-mode': 'same-origin'
+        }
       },
       ({ statusCode, body }) => {
         if (statusCode !== 200) {
@@ -45,45 +55,39 @@ async function tryDownloadPreviousBuild(span: any) {
             throw new Error('Download previous build failed! 404');
           }
         }
+
         return body;
       }
-    );
+      // by default, undici.pipeline returns a duplex stream (for POST/PUT)
+      // Since we are using GET, we need to end the write immediately
+    ).end();
 
-    await pipeline(
+    const pathPrefix = 'ruleset.skk.moe-master/';
+
+    return pipeline(
       respBody,
       zlib.createGunzip(),
-      tarExtract(PUBLIC_DIR, {
-        map(header: TarEntryHeaders) {
-          header.name = header.name.split('/').slice(1).join('/');
-          return header;
-        },
-      })
+      tarExtract(
+        PUBLIC_DIR,
+        {
+          ignore(_: string, header?: TarEntryHeaders) {
+            if (header) {
+              if (header.type !== 'file' && header.type !== 'directory') {
+                return true;
+              }
+              if (header.type === 'file' && path.extname(header.name) === '.ts') {
+                return true;
+              }
+            }
+
+            return false;
+          },
+          map(header) {
+            header.name = header.name.replace(pathPrefix, '');
+            return header;
+          }
+        }
+      )
     );
   });
-}
-
-export const downloadPreviousBuild = task(require.main === module, __filename)(
-  async (span) => {
-    if (fs.existsSync(PUBLIC_DIR) && !isDirectoryEmptySync(PUBLIC_DIR)) {
-      console.log(picocolors.blue('Public directory exists, skip downloading previous build'));
-      return;
-    }
-
-    if (isCI) {
-      console.warn(picocolors.yellow('CI environment detected, public directory is empty'));
-      try {
-        await tryDownloadPreviousBuild(span);
-        console.log(picocolors.green('Downloaded previous build successfully.'));
-        return;
-      } catch (err: any) {
-        console.warn(picocolors.red(`Failed to download previous build: ${err.message}`));
-        console.warn(picocolors.yellow('Falling back to full build...'));
-        // 不抛异常，直接返回让后续 build 流程继续
-        return;
-      }
-    }
-
-    // 本地或非 CI 情况，直接尝试下载
-    await tryDownloadPreviousBuild(span);
-  }
-);
+});
