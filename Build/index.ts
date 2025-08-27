@@ -27,7 +27,6 @@ import { createSpan, printTraceResult, whyIsNodeRunning } from './trace';
 import { buildDeprecateFiles } from './build-deprecate-files';
 import { CACHE_DIR, ROOT_DIR, PUBLIC_DIR } from './constants/dir';
 
-// 监听全局异常
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
   process.exit(1);
@@ -45,19 +44,8 @@ const removesFiles = [
 const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
 
 (async () => {
-  console.log('Version:', process.version);
   console.log(`OS: ${os.type()} ${os.release()} ${os.arch()}`);
   console.log(`Node.js: ${process.versions.node}`);
-  console.log(`V8: ${process.versions.v8}`);
-
-  const cpus = os.cpus().reduce<Record<string, number>>((o, cpu) => {
-    o[cpu.model] = (o[cpu.model] || 0) + 1;
-    return o;
-  }, {});
-  console.log(`CPU: ${Object.keys(cpus).map((key) => `${key} x ${cpus[key]}`).join('\n')}`);
-  if ('availableParallelism' in os) {
-    console.log(`Available parallelism: ${os.availableParallelism()}`);
-  }
   console.log(`Memory: ${os.totalmem() / (1024 * 1024)} MiB`);
 
   const rootSpan = createSpan('root');
@@ -66,7 +54,6 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
   }
 
   try {
-    // Actions debug 模式下启用 why-is-node-running
     if (isCI && process.env.RUNNER_DEBUG === '1') {
       await import('why-is-node-running');
     }
@@ -74,7 +61,7 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
     const downloadPreviousBuildPromise = downloadPreviousBuild(rootSpan);
     const buildCommonPromise = downloadPreviousBuildPromise.then(() => buildCommon(rootSpan));
 
-    // 第一阶段：不依赖 speedtest 的任务
+    // 阶段一：不依赖 speedtest / china_ip 的任务
     await Promise.all([
       ...removesFiles.map(file => fsp.rm(file, { force: true })),
       downloadPreviousBuildPromise,
@@ -84,7 +71,6 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
       downloadPreviousBuildPromise.then(() => buildCdnDownloadConf(rootSpan)),
       downloadPreviousBuildPromise.then(() => buildRejectDomainSet(rootSpan)),
       downloadPreviousBuildPromise.then(() => buildTelegramCIDR(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildChnCidr(rootSpan)),
       downloadPreviousBuildPromise.then(() => buildDomesticRuleset(rootSpan)),
       downloadPreviousBuildPromise.then(() => buildRedirectModule(rootSpan)),
       downloadPreviousBuildPromise.then(() => buildAlwaysRealIPModule(rootSpan)),
@@ -96,24 +82,23 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
       downloadMockAssets(rootSpan)
     ]);
 
-    // 第二阶段：先生成 speedtest
-    await downloadPreviousBuildPromise
-      .catch(() => {})
-      .then(() => buildSpeedtestDomainSet(rootSpan));
-
-    // 生成检查
+    // 阶段二：先生成 speedtest.conf 和 china_ip.conf
+    await downloadPreviousBuildPromise.catch(() => {});
+    await buildSpeedtestDomainSet(rootSpan);
     const spPath = path.resolve(PUBLIC_DIR, 'List/domainset/speedtest.conf');
     console.log('✅ speedtest.conf 生成检查:', fs.existsSync(spPath), spPath);
 
-    // 第三阶段：依赖 speedtest 的任务
+    await buildChnCidr(rootSpan);
+    const cnPath = path.resolve(PUBLIC_DIR, 'List/ip/china_ip.conf');
+    console.log('✅ china_ip.conf 生成检查:', fs.existsSync(cnPath), cnPath);
+
+    // 阶段三：依赖它们的任务
     await buildDeprecateFiles(rootSpan);
     await buildPublic(rootSpan);
 
     rootSpan.stop();
     printTraceResult(rootSpan.traceResult);
-
     fs.writeFileSync(buildFinishedLock, 'BUILD_FINISHED\n');
-
     await whyIsNodeRunning();
     process.exit(0);
   } catch (e) {
