@@ -44,55 +44,57 @@ const removesFiles = [
 const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
 
 (async () => {
-  console.log(`OS: ${os.type()} ${os.release()} ${os.arch()}`);
   console.log(`Node.js: ${process.versions.node}`);
   console.log(`Memory: ${os.totalmem() / (1024 * 1024)} MiB`);
-
   const rootSpan = createSpan('root');
-  if (fs.existsSync(buildFinishedLock)) {
-    fs.unlinkSync(buildFinishedLock);
-  }
+
+  if (fs.existsSync(buildFinishedLock)) fs.unlinkSync(buildFinishedLock);
 
   try {
     if (isCI && process.env.RUNNER_DEBUG === '1') {
       await import('why-is-node-running');
     }
 
-    const downloadPreviousBuildPromise = downloadPreviousBuild(rootSpan);
-    const buildCommonPromise = downloadPreviousBuildPromise.then(() => buildCommon(rootSpan));
+    const downloadPrev = downloadPreviousBuild(rootSpan);
+    const buildCommonPromise = downloadPrev.then(() => buildCommon(rootSpan));
 
-    // 阶段一：不依赖 speedtest / china_ip 的任务
+    // 阶段一：不依赖关键文件的任务
     await Promise.all([
       ...removesFiles.map(file => fsp.rm(file, { force: true })),
-      downloadPreviousBuildPromise,
+      downloadPrev,
       buildCommonPromise,
-      downloadPreviousBuildPromise.then(() => buildRejectIPList(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildAppleCdn(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildCdnDownloadConf(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildRejectDomainSet(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildTelegramCIDR(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildDomesticRuleset(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildRedirectModule(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildAlwaysRealIPModule(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildStreamService(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildMicrosoftCdn(rootSpan)),
-      Promise.all([downloadPreviousBuildPromise, buildCommonPromise])
-        .then(() => buildSSPanelUIMAppProfile(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildCloudMounterRules(rootSpan)),
+      downloadPrev.then(() => buildRejectIPList(rootSpan)),
+      downloadPrev.then(() => buildAppleCdn(rootSpan)),
+      downloadPrev.then(() => buildCdnDownloadConf(rootSpan)),
+      downloadPrev.then(() => buildRejectDomainSet(rootSpan)),
+      downloadPrev.then(() => buildTelegramCIDR(rootSpan)),
+      downloadPrev.then(() => buildRedirectModule(rootSpan)),
+      downloadPrev.then(() => buildAlwaysRealIPModule(rootSpan)),
+      downloadPrev.then(() => buildStreamService(rootSpan)),
+      downloadPrev.then(() => buildMicrosoftCdn(rootSpan)),
+      Promise.all([downloadPrev, buildCommonPromise]).then(() =>
+        buildSSPanelUIMAppProfile(rootSpan)
+      ),
+      downloadPrev.then(() => buildCloudMounterRules(rootSpan)),
       downloadMockAssets(rootSpan)
     ]);
 
-    // 阶段二：先生成 speedtest.conf 和 china_ip.conf
-    await downloadPreviousBuildPromise.catch(() => {});
+    // 阶段二：顺序生成关键文件
+    await downloadPrev.catch(() => {});
+
     await buildSpeedtestDomainSet(rootSpan);
     const spPath = path.resolve(PUBLIC_DIR, 'List/domainset/speedtest.conf');
-    console.log('✅ speedtest.conf 生成检查:', fs.existsSync(spPath), spPath);
+    console.log('✅ speedtest.conf:', fs.existsSync(spPath), spPath);
 
     await buildChnCidr(rootSpan);
     const cnPath = path.resolve(PUBLIC_DIR, 'List/ip/china_ip.conf');
-    console.log('✅ china_ip.conf 生成检查:', fs.existsSync(cnPath), cnPath);
+    console.log('✅ china_ip.conf:', fs.existsSync(cnPath), cnPath);
 
-    // 阶段三：依赖它们的任务
+    await buildDomesticRuleset(rootSpan);
+    const domPath = path.resolve(PUBLIC_DIR, 'List/non_ip/domestic.conf');
+    console.log('✅ domestic.conf:', fs.existsSync(domPath), domPath);
+
+    // 阶段三：依赖关键文件的任务
     await buildDeprecateFiles(rootSpan);
     await buildPublic(rootSpan);
 
