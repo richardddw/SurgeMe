@@ -142,14 +142,14 @@ function generateHtml(tree: TreeTypeArray) {
 
       <head>
         <meta charset="utf-8">
-        <title>Surge Ruleset Server | Sukka (@SukkaW)</title>
+        <title>DuDuWa Ruleset Server</title>
         <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
         <link href="https://cdn.skk.moe/favicon.ico" rel="icon" type="image/ico">
         <link href="https://cdn.skk.moe/favicon/apple-touch-icon.png" rel="apple-touch-icon" sizes="180x180">
         <link href="https://cdn.skk.moe/favicon/android-chrome-192x192.png" rel="icon" type="image/png" sizes="192x192">
         <link href="https://cdn.skk.moe/favicon/favicon-32x32.png" rel="icon" type="image/png" sizes="32x32">
         <link href="https://cdn.skk.moe/favicon/favicon-16x16.png" rel="icon" type="image/png" sizes="16x16">
-        <meta name="description" content="Sukka 自用的 Surge / Clash Premium 规则组">
+        <meta name="description" content="DDW 自用的 Surge / Clash 规则组">
 
         <meta property="og:title" content="Surge Ruleset | Sukka (@SukkaW)">
         <meta property="og:type" content="Website">
@@ -709,9 +709,9 @@ function generateHtml(tree: TreeTypeArray) {
       </head>
       <body>
         <main class="container">
-          <h1>Sukka Ruleset Server</h1>
+          <h1>DuDuWa Ruleset Server</h1>
           <p>
-            Made by <a href="https://skk.moe">Sukka</a> | <a href="https://github.com/SukkaW/Surge/">Source @ GitHub</a> | Licensed under <a href="/LICENSE" target="_blank">AGPL-3.0</a>
+            Mirror and Credit to <a href="https://skk.moe">Sukka</a> | <a href="https://github.com/SukkaW/Surge/">Source @ GitHub</a> | Licensed under <a href="/LICENSE" target="_blank">AGPL-3.0</a>
           </p>
           <p>Last Build: ${new Date().toISOString()}</p>
           <br>
