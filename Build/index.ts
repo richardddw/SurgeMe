@@ -86,7 +86,11 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
     }
 
     const downloadPreviousBuildPromise = downloadPreviousBuild(rootSpan);
-    const buildCommonPromise = downloadPreviousBuildPromise.then(() => buildCommon(rootSpan));
+    const buildCommonPromise = downloadPreviousBuildPromise
+      .catch(err => {
+        console.warn('Previous build step failed, continuing with fresh build:', err.message);
+      })
+      .then(() => buildCommon(rootSpan));
 
     await Promise.all([
       ...removesFiles.map(file => fsp.rm(file, { force: true })),
