@@ -32,10 +32,10 @@ jobs:
       - name: Build Surge Rules
         run: pnpm run build
 
-      - name: Deploy public/ to Vercel Branch
+      - name: Deploy to target root Branch
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
+          publish_dir: ./
           publish_branch: EO-publish
           force_orphan: true
