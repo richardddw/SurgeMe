@@ -2,8 +2,6 @@ import process from 'node:process';
 import os from 'node:os';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
-import path from 'node:path';
-import { isCI } from 'ci-info';
 
 import { downloadPreviousBuild } from './download-previous-build';
 import { buildCommon } from './build-common';
@@ -16,16 +14,23 @@ import { buildChnCidr } from './build-chn-cidr';
 import { buildSpeedtestDomainSet } from './build-speedtest-domainset';
 import { buildDomesticRuleset } from './build-domestic-direct-lan-ruleset-dns-mapping-module';
 import { buildStreamService } from './build-stream-service';
+
 import { buildRedirectModule } from './build-sgmodule-redirect';
 import { buildAlwaysRealIPModule } from './build-sgmodule-always-realip';
+
 import { buildMicrosoftCdn } from './build-microsoft-cdn';
 import { buildSSPanelUIMAppProfile } from './build-sspanel-appprofile';
+
 import { buildPublic } from './build-public';
 import { downloadMockAssets } from './download-mock-assets';
+
 import { buildCloudMounterRules } from './build-cloudmounter-rules';
+
 import { createSpan, printTraceResult, whyIsNodeRunning } from './trace';
 import { buildDeprecateFiles } from './build-deprecate-files';
-import { CACHE_DIR, ROOT_DIR, PUBLIC_DIR } from './constants/dir';
+import path from 'node:path';
+import { CACHE_DIR, ROOT_DIR } from './constants/dir';
+import { isCI } from 'ci-info';
 
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
@@ -41,66 +46,83 @@ const removesFiles = [
   path.join(CACHE_DIR, '.cache.db-shm'),
   path.join(CACHE_DIR, '.cache.db-wal')
 ];
+
 const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
 
 (async () => {
+  console.log('Version:', process.version);
+
+  console.log(`OS: ${os.type()} ${os.release()} ${os.arch()}`);
   console.log(`Node.js: ${process.versions.node}`);
+  console.log(`V8: ${process.versions.v8}`);
+
+  const cpus = os.cpus()
+    .reduce<Record<string, number>>((o, cpu) => {
+      o[cpu.model] = (o[cpu.model] || 0) + 1;
+      return o;
+    }, {});
+
+  console.log(`CPU: ${
+    Object.keys(cpus)
+      .map((key) => `${key} x ${cpus[key]}`)
+      .join('\n')
+  }`);
+  if ('availableParallelism' in os) {
+    console.log(`Available parallelism: ${os.availableParallelism()}`);
+  }
+
   console.log(`Memory: ${os.totalmem() / (1024 * 1024)} MiB`);
+
   const rootSpan = createSpan('root');
 
-  if (fs.existsSync(buildFinishedLock)) fs.unlinkSync(buildFinishedLock);
+  if (fs.existsSync(buildFinishedLock)) {
+    fs.unlinkSync(buildFinishedLock);
+  }
 
   try {
+    // only enable why-is-node-running in GitHub Actions debug mode
     if (isCI && process.env.RUNNER_DEBUG === '1') {
       await import('why-is-node-running');
     }
 
-    const downloadPrev = downloadPreviousBuild(rootSpan);
-    const buildCommonPromise = downloadPrev.then(() => buildCommon(rootSpan));
+    const downloadPreviousBuildPromise = downloadPreviousBuild(rootSpan);
+    const buildCommonPromise = downloadPreviousBuildPromise.then(() => buildCommon(rootSpan));
 
-    // 阶段一：不依赖关键文件的任务
     await Promise.all([
       ...removesFiles.map(file => fsp.rm(file, { force: true })),
-      downloadPrev,
+      downloadPreviousBuildPromise,
       buildCommonPromise,
-      downloadPrev.then(() => buildRejectIPList(rootSpan)),
-      downloadPrev.then(() => buildAppleCdn(rootSpan)),
-      downloadPrev.then(() => buildCdnDownloadConf(rootSpan)),
-      downloadPrev.then(() => buildRejectDomainSet(rootSpan)),
-      downloadPrev.then(() => buildTelegramCIDR(rootSpan)),
-      downloadPrev.then(() => buildRedirectModule(rootSpan)),
-      downloadPrev.then(() => buildAlwaysRealIPModule(rootSpan)),
-      downloadPrev.then(() => buildStreamService(rootSpan)),
-      downloadPrev.then(() => buildMicrosoftCdn(rootSpan)),
-      Promise.all([downloadPrev, buildCommonPromise]).then(() =>
-        buildSSPanelUIMAppProfile(rootSpan)
-      ),
-      downloadPrev.then(() => buildCloudMounterRules(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildRejectIPList(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildAppleCdn(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildCdnDownloadConf(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildRejectDomainSet(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildTelegramCIDR(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildChnCidr(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildSpeedtestDomainSet(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildDomesticRuleset(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildRedirectModule(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildAlwaysRealIPModule(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildStreamService(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildMicrosoftCdn(rootSpan)),
+      Promise.all([
+        downloadPreviousBuildPromise,
+        buildCommonPromise
+      ]).then(() => buildSSPanelUIMAppProfile(rootSpan)),
+      downloadPreviousBuildPromise.then(() => buildCloudMounterRules(rootSpan)),
       downloadMockAssets(rootSpan)
     ]);
 
-    // 阶段二：顺序生成关键文件
-    await downloadPrev.catch(() => {});
-
-    await buildSpeedtestDomainSet(rootSpan);
-    const spPath = path.resolve(PUBLIC_DIR, 'List/domainset/speedtest.conf');
-    console.log('✅ speedtest.conf:', fs.existsSync(spPath), spPath);
-
-    await buildChnCidr(rootSpan);
-    const cnPath = path.resolve(PUBLIC_DIR, 'List/ip/china_ip.conf');
-    console.log('✅ china_ip.conf:', fs.existsSync(cnPath), cnPath);
-
-    await buildDomesticRuleset(rootSpan);
-    const domPath = path.resolve(PUBLIC_DIR, 'List/non_ip/domestic.conf');
-    console.log('✅ domestic.conf:', fs.existsSync(domPath), domPath);
-
-    // 阶段三：依赖关键文件的任务
     await buildDeprecateFiles(rootSpan);
     await buildPublic(rootSpan);
 
     rootSpan.stop();
+
     printTraceResult(rootSpan.traceResult);
+
+    // write a file to demonstrate that the build is finished
     fs.writeFileSync(buildFinishedLock, 'BUILD_FINISHED\n');
+
+    // Finish the build to avoid leaking timer/fetch ref
     await whyIsNodeRunning();
     process.exit(0);
   } catch (e) {
