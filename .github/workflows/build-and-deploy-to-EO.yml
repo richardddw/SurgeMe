@@ -4,9 +4,7 @@ on:
   push:
     branches:
       - DDW-custom  # 或你主要开发分支的名字
-  schedule:
-    - cron: '0 18 * * *' # +8时区凌晨2点
-    - cron: '0 6 * * *'  # +8时区下午2点
+
   workflow_dispatch:
 
 jobs:
