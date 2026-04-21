@@ -11,7 +11,7 @@
   "scripts": {
     "node": "SWC_NODE_IGNORE_DYNAMIC=true node -r @swc-node/register",
     "dexnode": "SWC_NODE_IGNORE_DYNAMIC=true dexnode -r @swc-node/register",
-    "build": "npm run node ./Build/index.ts",
+    "build": "pnpm run node ./Build/index.ts",
     "build-profile": "pnpm run dexnode -r @swc-node/register ./Build/index.ts",
     "lint": "eslint --format=sukka .",
     "test": "SWC_NODE_IGNORE_DYNAMIC=true SWC_NODE_PROJECT=tsconfig.test.json mocha --require @swc-node/register --watch-extensions ts,tsx"
