@@ -791,7 +791,10 @@ const WETV: StreamService = {
 const VUDU: StreamService = {
   name: 'Vudu',
   rules: [
-    'DOMAIN-SUFFIX,vudu.com'
+    'DOMAIN,vudu.com',
+    'DOMAIN,athome.fandango.com'
+    // images2.vudu.com -- no geo block
+    // api.vudu.com -- no geo block
   ]
 };
 
@@ -801,6 +804,36 @@ const FRIDAY_TW: StreamService = {
     // https://github.com/SukkaW/Surge/pull/74#issuecomment-3188450562
     'DOMAIN,video.friday.tw',
     'DOMAIN,ana.video.friday.tw' // Does't actually a detection, only a log report stuff and not actually being used anywhere
+  ]
+};
+
+const MANGAFOX: StreamService = {
+  name: 'MangaFox',
+  rules: [
+    'DOMAIN-SUFFIX,mangafox.me',
+    'DOMAIN-SUFFIX,fanfox.net'
+  ]
+};
+
+const TUBI_TV: StreamService = {
+  name: 'Tubi TV',
+  rules: [
+    'DOMAIN,tubi.tv',
+    'DOMAIN,www.tubi.tv',
+    'DOMAIN,tubitv.com',
+    'DOMAIN,www.tubitv.com',
+    'DOMAIN-SUFFIX,production-public.tubi.io'
+    // mcdn.tubi.tv -- no geo block
+    // canvas-lb.tubitv.com -- image CDN, also no geo blocking
+    // tubi.video -- streaming CDN, also no geo blocking
+  ]
+};
+
+const PLUTO_TV: StreamService = {
+  name: 'Pluto TV',
+  rules: [
+    'DOMAIN,pluto.tv',
+    'DOMAIN,www.pluto.tv'
   ]
 };
 
@@ -819,12 +852,12 @@ export const ALL: StreamService[] = [
   KKBOX,
   KKTV,
   LINE_TV,
-  MY5, MYTV_SUPER,
+  MANGAFOX, MY5, MYTV_SUPER,
   NETFLIX, NAVER_TV, NICONICO, NHK_PLUS, NOW_E,
   OVERCAST_FM,
-  PARAMOUNT, PBS, PEACOCK, PANDORA, PORNHUB,
+  PARAMOUNT, PBS, PEACOCK, PANDORA, PORNHUB, PLUTO_TV,
   SOUNDCLOUD, SHOWTIME, SPOTIFY,
-  TAIWAN_GOOD, TIDAL, TIKTOK, TVB_ANYWHERE, TWITCH,
+  TAIWAN_GOOD, TIDAL, TIKTOK, TVB_ANYWHERE, TWITCH, TUBI_TV,
   VIUTV, VUDU,
   WETV,
   YOUTUBE, YOUTUBE_MUSIC
@@ -852,7 +885,7 @@ export const NORTH_AMERICA: StreamService[] = [
   // https://setantasports.com/
   // tubitv.com
   // SlingTV
-  // PlutoTV
+  PLUTO_TV,
   // AcornTV
   SHOWTIME,
   ENCORE_TVB,
@@ -860,7 +893,8 @@ export const NORTH_AMERICA: StreamService[] = [
   DISCOVERY_PLUS,
   PARAMOUNT,
   PEACOCK,
-  CRACKLE
+  CRACKLE,
+  TUBI_TV
   // Popcornflix
   // Crunchyroll
   // ATTNOW
@@ -919,7 +953,8 @@ export const TW: StreamService[] = [
   HBO_ASIA,
   BAHAMUT,
   // elevensportstw,
-  FRIDAY_TW
+  FRIDAY_TW,
+  MANGAFOX
 ];
 
 export const JP: StreamService[] = [
@@ -972,6 +1007,7 @@ export const KR = [
 ];
 
 export const SOUTH_EAST_ASIA = [
+  MANGAFOX
   // HBO
   // B-Global SouthEastAsia
   // MeWatch SG

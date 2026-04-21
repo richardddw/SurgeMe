@@ -16,10 +16,9 @@ import { SHARED_DESCRIPTION } from './constants/description';
 
 import { addArrayElementsToSet } from 'foxts/add-array-elements-to-set';
 import { OUTPUT_INTERNAL_DIR, SOURCE_DIR } from './constants/dir';
-import { DomainsetOutput } from './lib/rules/domainset';
+import { DomainsetOutput, AdGuardHomeOutput } from './lib/rules/domainset';
 import { foundDebugDomain } from './lib/parse-filter/shared';
-import { AdGuardHomeOutput } from './lib/rules/domainset';
-import { getPhishingDomains } from './lib/get-phishing-domains';
+import { createWorker } from './lib/worker';
 import type { MaybePromise } from './lib/misc';
 import { RulesetOutput } from './lib/rules/ruleset';
 import { fetchAssets } from './lib/fetch-assets';
@@ -40,6 +39,9 @@ const adguardFiltersExtraDownloads = ADGUARD_FILTERS_EXTRA.map(entry => processF
 const adguardFiltersWhitelistsDownloads = ADGUARD_FILTERS_WHITELIST.map(entry => processFilterRulesWithPreload(...entry));
 
 export const buildRejectDomainSet = task(require.main === module, __filename)(async (span) => {
+  const phishingWorker = createWorker<typeof import('./lib/get-phishing-domains')>(
+    require.resolve('./lib/get-phishing-domains')
+  )(['getPhishingDomains']);
   const rejectDomainsetOutput = new DomainsetOutput(span, 'reject')
     .withTitle('Sukka\'s Ruleset - Reject Base')
     .appendDescription(
@@ -97,6 +99,7 @@ export const buildRejectDomainSet = task(require.main === module, __filename)(as
   // It is faster to add base than add others first then whitelist
   rejectDomainsetOutput.addFromRuleset(readLocalRejectRulesetPromise);
   rejectExtraDomainsetOutput.addFromRuleset(readLocalRejectRulesetPromise);
+  rejectPhisingDomainsetOutput.addFromRuleset(readLocalRejectRulesetPromise);
 
   rejectNonIpRulesetOutput.addFromRuleset(readLocalRejectRulesetPromise);
 
@@ -127,7 +130,9 @@ export const buildRejectDomainSet = task(require.main === module, __filename)(as
       arrayPushNonNullish(promises, domainListsDownloads.map(task => task(childSpan).then(appendArrayToRejectOutput)));
       arrayPushNonNullish(promises, domainListsExtraDownloads.map(task => task(childSpan).then(appendArrayToRejectExtraOutput)));
 
-      rejectPhisingDomainsetOutput.addFromDomainset(getPhishingDomains(childSpan));
+      rejectPhisingDomainsetOutput.addFromDomainset(
+        span.traceWorkerChild('get phishing domains', rawSpan => phishingWorker.getPhishingDomains(rawSpan))
+      );
 
       arrayPushNonNullish(
         promises,
@@ -208,10 +213,9 @@ export const buildRejectDomainSet = task(require.main === module, __filename)(as
           for (let i = 0, len = arr.length; i < len; i++) {
             const line = arr[i];
             if (line.startsWith('bogus-nxdomain=')) {
-              // bogus nxdomain needs to be blocked even after resolved
               rejectIPOutput.addAnyCIDR(
                 line.slice(15).trim(),
-                false
+                false // bogus nxdomain needs to be blocked even after resolved
               );
             }
           }
@@ -254,6 +258,7 @@ export const buildRejectDomainSet = task(require.main === module, __filename)(as
       rejectNonIpRulesetOutput.whitelistKeyword(keyword);
     }
 
+    // Deduplicate reject_extra and reject_phishing from the base reject domainset
     rejectDomainsetOutput.domainTrie.dump(arg => {
       rejectExtraDomainsetOutput.whitelistDomain(arg);
       rejectPhisingDomainsetOutput.whitelistDomain(arg);
@@ -264,11 +269,11 @@ export const buildRejectDomainSet = task(require.main === module, __filename)(as
   });
 
   await Promise.all([
-    rejectDomainsetOutput.write(),
-    rejectExtraDomainsetOutput.write(),
-    rejectPhisingDomainsetOutput.write(),
-    rejectIPOutput.write(),
-    rejectNonIpRulesetOutput.write()
+    span.traceChildAsync('write reject domainset', () => rejectDomainsetOutput.write()),
+    span.traceChildAsync('write reject_extra domainset', () => rejectExtraDomainsetOutput.write()),
+    span.traceChildAsync('write reject_phishing domainset', () => rejectPhisingDomainsetOutput.write()),
+    span.traceChildAsync('write reject ip list', () => rejectIPOutput.write()),
+    span.traceChildAsync('write reject non-ip ruleset', () => rejectNonIpRulesetOutput.write())
   ]);
 
   // we are going to re-use rejectOutput's domainTrie and mutate it
@@ -296,4 +301,6 @@ export const buildRejectDomainSet = task(require.main === module, __filename)(as
   await myRejectOutputAdGuardHome
     .addFromRuleset(readFileIntoProcessedArray(path.join(SOURCE_DIR, 'non_ip/my_reject.conf')))
     .write();
+
+  await phishingWorker.end();
 });

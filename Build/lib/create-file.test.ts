@@ -1,4 +1,4 @@
-import { expect } from 'expect';
+import { expect } from 'earl';
 import { fileEqual } from './create-file';
 
 // eslint-disable-next-line @typescript-eslint/require-await -- async iterable
@@ -9,7 +9,7 @@ async function *createSource(input: string[]) {
 }
 
 async function test(a: string[], b: string[], expected: boolean) {
-  expect((await fileEqual(a, createSource(b)))).toBe(expected);
+  expect((await fileEqual(a, createSource(b)))).toEqual(expected);
 }
 
 describe('fileEqual', () => {

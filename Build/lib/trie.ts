@@ -23,10 +23,11 @@ type TrieNode<Meta = any> = [
 
 function deepTrieNodeToJSON<Meta = unknown>(node: TrieNode,
   unpackMeta: ((meta?: Meta) => string) | undefined) {
-  const obj: Record<string, unknown> = {};
+  const obj: Record<string, unknown> = {
+    ['[start]']: getBit(node[0], START),
+    ['[subdomain]']: getBit(node[0], INCLUDE_ALL_SUBDOMAIN)
+  };
 
-  obj['[start]'] = getBit(node[0], START);
-  obj['[subdomain]'] = getBit(node[0], INCLUDE_ALL_SUBDOMAIN);
   if (node[4] != null) {
     if (unpackMeta) {
       obj['[meta]'] = unpackMeta(node[4]);
@@ -186,10 +187,44 @@ abstract class Triebase<Meta = unknown> {
   public contains(suffix: string, includeAllSubdomain = suffix[0] === '.'): boolean {
     const hostnameFromIndex = suffix[0] === '.' ? 1 : 0;
 
-    const res = this.walkIntoLeafWithSuffix(suffix, hostnameFromIndex);
-    if (!res) return false;
-    if (includeAllSubdomain) return getBit(res.node[0], INCLUDE_ALL_SUBDOMAIN);
-    return true;
+    let node: TrieNode = this.$root;
+    // let parent: TrieNode = node;
+
+    let child: Map<string, TrieNode<Meta>> = node[2];
+
+    let result = false;
+
+    const onToken = (token: string) => {
+      // if (token === '') {
+      //   return true;
+      // }
+
+      // parent = node;
+
+      child = node[2];
+
+      if (child.has(token)) {
+        node = child.get(token)!;
+      } else {
+        if (getBit(node[0], INCLUDE_ALL_SUBDOMAIN)) {
+          result = true;
+        }
+        return null;
+      }
+
+      return false;
+    };
+
+    if (walkHostnameTokens(suffix, onToken, hostnameFromIndex) === null) {
+      return result;
+    }
+
+    if (includeAllSubdomain) return getBit(node[0], INCLUDE_ALL_SUBDOMAIN);
+    return getBit(node[0], START);
+
+    // if (res === null) return false;
+    // if (includeAllSubdomain) return getBit(res.node[0], INCLUDE_ALL_SUBDOMAIN);
+    // return true;
   };
 
   private static bfsResults: [node: TrieNode | null, suffix: string[]] = [null, []];
@@ -244,12 +279,10 @@ abstract class Triebase<Meta = unknown> {
   ) {
     const dfsImpl = withSort ? Triebase.dfsWithSort : Triebase.dfs;
 
-    const nodeStack: Array<TrieNode<Meta>> = [];
-    nodeStack.push(initialNode);
+    const nodeStack: Array<TrieNode<Meta>> = [initialNode];
 
     // Resolving initial string (begin the start of the stack)
-    const suffixStack: string[][] = [];
-    suffixStack.push(initialSuffix);
+    const suffixStack: string[][] = [initialSuffix];
 
     let node: TrieNode<Meta> = initialNode;
     let r;
