@@ -33,13 +33,13 @@ const getSpeedtestHostsGroupsPromise = $$fetch('https://speedtest-net-servers.cd
     if (cur.host) {
       hn = tldts.getHostname(cur.host, { detectIp: false, validateHostname: true });
       if (hn) {
-        prev.push(hn);
+        prev.push(hn.trim()); // speedtest API typo: "url":"http:// t4y-toronto-ca-osts1.ser.tek4you.ca:8080/speedtest/upload.php"
       }
     }
     if (cur.url) {
       hn = fastUri.parse(cur.url).host;
       if (hn) {
-        prev.push(hn);
+        prev.push(hn.trim()); // speedtest API typo: "url":"http:// t4y-toronto-ca-osts1.ser.tek4you.ca:8080/speedtest/upload.php"
       }
     }
     return prev;
@@ -62,7 +62,7 @@ const getLibrespeedBackendsPromise = $$fetch('https://speedtest-net-servers.cdn.
     if (cur.server) {
       hn = fastUri.parse(cur.server).host;
       if (hn) {
-        prev.push(hn);
+        prev.push(hn.trim());
       }
     }
 
@@ -79,7 +79,7 @@ export const buildSpeedtestDomainSet = task(require.main === module, __filename)
     )
     .addFromDomainset(readFileIntoProcessedArray(path.resolve(SOURCE_DIR, 'domainset/speedtest.conf')))
     .addFromDomainset(readFileIntoProcessedArray(path.resolve(OUTPUT_SURGE_DIR, 'domainset/speedtest.conf')))
-    .bulkAddDomain(await span.traceChildPromise('get speedtest.test servers', getSpeedtestHostsGroupsPromise))
+    .bulkAddDomain(await span.traceChildPromise('get speedtest.net servers', getSpeedtestHostsGroupsPromise))
     .bulkAddDomain(await span.traceChildPromise('get librespeed backends', getLibrespeedBackendsPromise))
     .write()
 );

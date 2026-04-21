@@ -3,18 +3,21 @@ import { createRetrieKeywordFilter as createKeywordFilter } from 'foxts/retrie';
 export const BLACK_TLD = new Set([
   'accountant', 'art', 'autos',
   'bar', 'beauty', 'bid', 'bio', 'biz', 'bond', 'business', 'buzz',
-  'cc', 'cf', 'cfd', 'click', 'cloud', 'club', 'cn', 'codes',
+  'casa', 'cc', 'cf', 'cfd', 'click', 'cloud', 'club', 'cn', 'codes',
   'co.uk', 'co.in', 'com.br', 'com.cn', 'com.pl', 'com.vn',
   'cool', 'cricket', 'cyou',
   'date', 'design', 'digital', 'download',
+  'email',
   'faith', 'fit', 'fun',
-  'ga', 'gd', 'gives', 'gq', 'group', 'host',
+  'ga', 'games', 'gd', 'gives', 'gq', 'group',
+  'help', 'host',
   'icu', 'id', 'info', 'ink',
-  'lat', 'life', 'live', 'link', 'loan', 'lol', 'ltd',
-  'me', 'men', 'ml', 'mobi', 'mom', 'monster',
-  'net.pl',
+  'lat', 'life', 'live', 'link', 'loan', 'lol', 'love', 'ltd',
+  'me', 'media', 'men', 'ml', 'mobi', 'movie', 'mom', 'monster',
+  'net.pl', 'ninja',
   'one', 'online',
   'party', 'pro', 'pl', 'pw',
+  'qpon', 'quest',
   'racing', 'rest', 'review', 'rf.gd',
   'sa.com', 'sbs', 'science', 'shop', 'site', 'skin', 'space', 'store', 'stream', 'su', 'support', 'surf',
   'tech', 'tk', 'tokyo', 'top', 'trade',
@@ -41,7 +44,11 @@ export const WHITELIST_MAIN_DOMAINS = new Set([
   'cloud.microsoft', // actually owned by Microsoft
   'windows.net', // Microsoft refuses to add web.core.windows.net to the Public Suffix List
   'myqcloud.com', // curben phishing-filter contains many entries
-  'surge.sh' // caused by phishing-filter, also no public suffix
+  'surge.sh', // caused by phishing-filter, also no public suffix
+  'backblazeb2.com', // phishing-filter, no publicsuffix, too much abuse
+
+  'pages.dev',
+  'workers.dev'
 ]);
 
 export const leathalKeywords = createKeywordFilter([

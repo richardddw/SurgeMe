@@ -3,16 +3,17 @@ import path from 'node:path';
 import { DOMESTICS, DOH_BOOTSTRAP, AdGuardHomeDNSMapping } from '../Source/non_ip/domestic';
 import { DIRECTS, HOSTS, LAN } from '../Source/non_ip/direct';
 import type { DNSMapping } from '../Source/non_ip/direct';
-import { readFileIntoProcessedArray } from './lib/fetch-text-by-line';
+import { fetchRemoteTextByLine, readFileIntoProcessedArray } from './lib/fetch-text-by-line';
 import { compareAndWriteFile } from './lib/create-file';
 import { task } from './trace';
+import type { Span } from './trace';
 import { SHARED_DESCRIPTION } from './constants/description';
 import { once } from 'foxts/once';
 import * as yaml from 'yaml';
 import { appendArrayInPlace } from 'foxts/append-array-in-place';
 import { OUTPUT_INTERNAL_DIR, OUTPUT_MODULES_DIR, OUTPUT_MODULES_RULES_DIR, SOURCE_DIR } from './constants/dir';
-import { MihomoNameserverPolicyOutput, RulesetOutput } from './lib/rules/ruleset';
-import { SurgeOnlyRulesetOutput } from './lib/rules/ruleset';
+import { MihomoNameserverPolicyOutput, RulesetOutput, SurgeOnlyRulesetOutput } from './lib/rules/ruleset';
+import { $$fetch } from './lib/fetch-retry';
 
 export function createGetDnsMappingRule(allowWildcard: boolean) {
   const hasWildcard = (domain: string) => {
@@ -112,6 +113,7 @@ export const buildDomesticRuleset = task(require.main === module, __filename)(as
       .addFromRuleset(lans)
       .write(),
 
+    buildLANCacheRuleset(span),
     ...dataset.map(([name, { ruleset, domains }]) => {
       if (!ruleset) {
         return;
@@ -233,7 +235,9 @@ export const buildDomesticRuleset = task(require.main === module, __filename)(as
             const ruleset_name = cur[0].toLowerCase();
             const mihomo_ruleset_id = `mihomo_nameserver_policy_${ruleset_name}`;
 
-            acc.dns['nameserver-policy'][`rule-set:${mihomo_ruleset_id}`] = dns;
+            if (dns) {
+              acc.dns['nameserver-policy'][`rule-set:${mihomo_ruleset_id}`] = dns;
+            }
 
             acc['rule-providers'][mihomo_ruleset_id] = {
               type: 'http',
@@ -257,7 +261,9 @@ export const buildDomesticRuleset = task(require.main === module, __filename)(as
                   break;
               }
 
-              acc.dns['nameserver-policy'][domain] = dns;
+              if (dns) {
+                acc.dns['nameserver-policy'][domain] = dns;
+              }
             });
           }
 
@@ -293,10 +299,14 @@ export const buildDomesticRuleset = task(require.main === module, __filename)(as
       span,
       [
         '# Local DNS Mapping for AdGuard Home',
-        'tls://dot.pub',
         'https://doh.pub/dns-query',
+        'https://dns.alidns.com/dns-query',
         '[//]udp://10.10.1.1:53',
         ...(([DOMESTICS, DIRECTS, LAN, HOSTS] as const).flatMap(Object.values) as DNSMapping[]).flatMap(({ domains, dns: _dns }) => domains.flatMap((domain) => {
+          if (!_dns) {
+            return [];
+          }
+
           let dns;
           if (_dns in AdGuardHomeDNSMapping) {
             dns = AdGuardHomeDNSMapping[_dns as keyof typeof AdGuardHomeDNSMapping].join(' ');
@@ -332,3 +342,84 @@ export const buildDomesticRuleset = task(require.main === module, __filename)(as
     )
   ]);
 });
+
+async function buildLANCacheRuleset(span: Span) {
+  const childSpan = span.traceChild('build LAN cache ruleset');
+
+  const cacheDomainsData = await childSpan.traceChildAsync('fetch cache_domains.json', async () => (await $$fetch('https://cdn.jsdelivr.net/gh/uklans/cache-domains@master/cache_domains.json')).json());
+  if (!cacheDomainsData || typeof cacheDomainsData !== 'object' || !('cache_domains' in cacheDomainsData) || !Array.isArray(cacheDomainsData.cache_domains)) {
+    throw new TypeError('Invalid cache domains data');
+  }
+  const allDomainFiles = cacheDomainsData.cache_domains.reduce<string[]>((acc, { domain_files }) => {
+    if (Array.isArray(domain_files)) {
+      appendArrayInPlace(acc, domain_files);
+    }
+    return acc;
+  }, []);
+
+  const allDomains = (
+    await Promise.all(
+      allDomainFiles.map(
+        async (file) => childSpan.traceChildAsync(
+          'download ' + file,
+          async () => Array.fromAsync(await fetchRemoteTextByLine('https://cdn.jsdelivr.net/gh/uklans/cache-domains@master/' + file, true))
+        )
+      )
+    )
+  ).flat();
+
+  const surgeOutput = new SurgeOnlyRulesetOutput(
+    span,
+    'lancache',
+    'sukka_local_dns_mapping',
+    OUTPUT_MODULES_RULES_DIR
+  )
+    .withTitle('Sukka\'s Ruleset - Local DNS Mapping (lancache)')
+    .appendDescription(
+      SHARED_DESCRIPTION,
+      '',
+      'This is an internal rule that is only referenced by sukka_local_dns_mapping.sgmodule',
+      'Do not use this file in your Rule section.'
+    );
+
+  const mihomoOutput = new MihomoNameserverPolicyOutput(
+    span,
+    'lancache',
+    'mihomo_nameserver_policy',
+    OUTPUT_INTERNAL_DIR
+  )
+    .withTitle('Sukka\'s Ruleset - Local DNS Mapping for Mihomo NameServer Policy (lancache)')
+    .appendDescription(
+      SHARED_DESCRIPTION,
+      '',
+      'This ruleset is only used for mihomo\'s nameserver-policy feature, which',
+      'is similar to the RULE-SET referenced by sukka_local_dns_mapping.sgmodule.',
+      'Do not use this file in your Rule section.'
+    );
+
+  for (let i = 0, len = allDomains.length; i < len; i++) {
+    const domain = allDomains[i];
+
+    if (domain.includes('*')) {
+      // If only *. prefix is used, we can convert it to DOMAIN-SUFFIX
+      if (domain.startsWith('*.') && !domain.slice(2).includes('*')) {
+        const domainSuffix = domain.slice(2);
+        surgeOutput.addDomainSuffix(domainSuffix);
+        mihomoOutput.addDomainSuffix(domainSuffix);
+        continue;
+      }
+
+      surgeOutput.addDomainWildcard(domain);
+      mihomoOutput.addDomainWildcard(domain);
+      continue;
+    }
+
+    surgeOutput.addDomain(domain);
+    mihomoOutput.addDomain(domain);
+  }
+
+  return Promise.all([
+    surgeOutput.write(),
+    mihomoOutput.write()
+  ]);
+}

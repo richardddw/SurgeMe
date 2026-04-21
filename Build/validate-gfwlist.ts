@@ -10,6 +10,7 @@ import { $$fetch } from './lib/fetch-retry';
 import runAgainstSourceFile from './lib/run-against-source-file';
 import { nullthrow } from 'foxts/guard';
 import { Buffer } from 'node:buffer';
+import { GLOBAL } from '../Source/non_ip/global';
 
 export async function getTopOneMillionDomains() {
   const { parse: csvParser } = await import('csv-parse');
@@ -56,6 +57,8 @@ export async function parseGfwList() {
   const whiteSet = new Set<string>();
   const gfwListTrie = new HostnameSmolTrie();
 
+  let totalGfwSize = 0;
+
   const gfwlistIgnoreLineKwfilter = createKeywordFilter([
     '.*',
     '*',
@@ -99,14 +102,17 @@ export async function parseGfwList() {
     }
     const d = fastNormalizeDomain(line);
     if (d) {
+      totalGfwSize++;
       gfwListTrie.add(d);
       continue;
     }
   }
   for await (const l of await fetchRemoteTextByLine('https://raw.githubusercontent.com/Loyalsoldier/cn-blocked-domain/release/domains.txt', true)) {
+    totalGfwSize++;
     gfwListTrie.add(l);
   }
   for await (const l of await fetchRemoteTextByLine('https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/gfw.txt', true)) {
+    totalGfwSize++;
     gfwListTrie.add(l);
   }
 
@@ -132,7 +138,22 @@ export async function parseGfwList() {
     runAgainstSourceFile(path.resolve(OUTPUT_SURGE_DIR, 'domainset/cdn.conf'), callback, 'domainset')
   ]);
 
+  Object.values(GLOBAL).forEach(({ domains }) => {
+    domains.forEach(domain => {
+      if (domain[0] === '$') {
+        callback(domain.slice(1), false);
+      } else if (domain[0] === '+') {
+        callback(domain.slice(1), true);
+      } else {
+        callback(domain, true);
+      }
+    });
+  });
+
   whiteSet.forEach(domain => gfwListTrie.whitelist(domain, true));
+
+  let dedupedGfwListSize = 0;
+  gfwListTrie.dump(() => dedupedGfwListSize++);
 
   const kwfilter = createKeywordFilter([...keywordSet]);
 
@@ -144,8 +165,8 @@ export async function parseGfwList() {
     }
   });
 
-  console.log(missingTop10000Gfwed.size, '');
   console.log(Array.from(missingTop10000Gfwed).join('\n'));
+  console.log({ totalGfwSize, dedupedGfwListSize, missingSize: missingTop10000Gfwed.size });
 
   return [
     whiteSet,
@@ -157,3 +178,5 @@ export async function parseGfwList() {
 if (require.main === module) {
   parseGfwList().catch(console.error);
 }
+
+// python.com waiting-for-sell

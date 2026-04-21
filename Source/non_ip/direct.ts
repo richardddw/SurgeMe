@@ -6,7 +6,7 @@ export interface DNSMapping {
   realip: boolean,
   /** should convert to ruleset */
   ruleset: boolean,
-  dns: string,
+  dns: string | null,
   /**
    * domain[0]
    *
@@ -47,12 +47,21 @@ export const DIRECTS = {
 } as const satisfies Record<string, DNSMapping>;
 
 export const LAN = {
+  // By default, all hostnames with the suffix '.local' will be resolved by the system.
+  // Some app like OrbStack uses mDNS and this TLD (orb.local) via mDNS.
+  // Surge already handles .local with mDNS properly, we should not map to server:system
+  LOCAL_SPECIAL: {
+    dns: null, // disable DNS server for now. In the future we might wannna explicitly specify `server: force-syslib`
+    hosts: {},
+    realip: true,
+    ruleset: false,
+    domains: [
+      '+local'
+    ]
+  },
   LAN_WITHOUT_REAL_IP: {
     dns: 'system',
-    hosts: {
-      '127.0.0.1.sslip.io': ['127.0.0.1'],
-      '127.atlas.skk.moe': ['127.0.0.1']
-    },
+    hosts: {},
     realip: false,
     ruleset: true,
     domains: [
@@ -132,21 +141,20 @@ export const LAN = {
   },
   LAN_WITH_REALIP: {
     dns: 'system',
-    hosts: {
-      // localhost: ['127.0.0.1']
-    },
+    hosts: {},
     realip: true,
     ruleset: true,
     domains: [
       '+lan',
-      '+local',
+      // By default, all hostnames with the suffix '.local' will be resolved by the system.
+      // Some app like OrbStack uses mDNS and this TLD (orb.local) via mDNS.
+      // Surge already handles .local with mDNS properly, we should not map to server:system
+      // '+local',
       '+internal',
       // 'amplifi.lan',
       // '$localhost',
       '+localdomain',
-      'home.arpa',
-      '127.0.0.1.sslip.io',
-      '127.atlas.skk.moe'
+      'home.arpa'
     ]
   }
 } as const satisfies Record<string, DNSMapping>;

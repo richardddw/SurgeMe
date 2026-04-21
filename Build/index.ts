@@ -1,35 +1,31 @@
 import process from 'node:process';
 import os from 'node:os';
 import fs from 'node:fs';
-import fsp from 'node:fs/promises';
 
 import { downloadPreviousBuild } from './download-previous-build';
 import { buildCommon } from './build-common';
 import { buildRejectIPList } from './build-reject-ip-list';
 import { buildAppleCdn } from './build-apple-cdn';
-import { buildCdnDownloadConf } from './build-cdn-download-conf';
 import { buildRejectDomainSet } from './build-reject-domainset';
-import { buildTelegramCIDR } from './build-telegram-cidr';
 import { buildChnCidr } from './build-chn-cidr';
 import { buildSpeedtestDomainSet } from './build-speedtest-domainset';
 import { buildDomesticRuleset } from './build-domestic-direct-lan-ruleset-dns-mapping-module';
+import { buildGlobalRuleset } from './build-global-server-dns-mapping';
 import { buildStreamService } from './build-stream-service';
 
 import { buildRedirectModule } from './build-sgmodule-redirect';
 import { buildAlwaysRealIPModule } from './build-sgmodule-always-realip';
 
-import { buildMicrosoftCdn } from './build-microsoft-cdn';
-import { buildSSPanelUIMAppProfile } from './build-sspanel-appprofile';
+import { createWorker } from './lib/worker';
 
 import { buildPublic } from './build-public';
-import { downloadMockAssets } from './download-mock-assets';
-
 import { buildCloudMounterRules } from './build-cloudmounter-rules';
 
-import { createSpan, printTraceResult, whyIsNodeRunning } from './trace';
+import { printStats, printTraceResult, whyIsNodeRunning } from './trace';
+import type { TraceResult } from './trace';
 import { buildDeprecateFiles } from './build-deprecate-files';
 import path from 'node:path';
-import { CACHE_DIR, ROOT_DIR } from './constants/dir';
+import { ROOT_DIR } from './constants/dir';
 import { isCI } from 'ci-info';
 
 process.on('uncaughtException', (error) => {
@@ -40,12 +36,6 @@ process.on('unhandledRejection', (reason) => {
   console.error('Unhandled rejection:', reason);
   process.exit(1);
 });
-
-const removesFiles = [
-  path.join(CACHE_DIR, '.cache.db'),
-  path.join(CACHE_DIR, '.cache.db-shm'),
-  path.join(CACHE_DIR, '.cache.db-wal')
-];
 
 const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
 
@@ -73,11 +63,25 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
 
   console.log(`Memory: ${os.totalmem() / (1024 * 1024)} MiB`);
 
-  const rootSpan = createSpan('root');
-
   if (fs.existsSync(buildFinishedLock)) {
     fs.unlinkSync(buildFinishedLock);
   }
+
+  const microsoftCdnWorker = createWorker<typeof import('./build-microsoft-cdn.worker')>(
+    require.resolve('./build-microsoft-cdn.worker')
+  )(['buildMicrosoftCdn']);
+
+  const cdnDownloadWorker = createWorker<typeof import('./build-cdn-download-conf.worker')>(
+    require.resolve('./build-cdn-download-conf.worker')
+  )(['buildCdnDownloadConf']);
+
+  const telegramCidrWorker = createWorker<typeof import('./build-telegram-cidr.worker')>(
+    require.resolve('./build-telegram-cidr.worker')
+  )(['buildTelegramCIDR']);
+
+  const mockAssetsWorker = createWorker<typeof import('./download-mock-assets.worker')>(
+    require.resolve('./download-mock-assets.worker')
+  )(['downloadMockAssets']);
 
   try {
     // only enable why-is-node-running in GitHub Actions debug mode
@@ -85,42 +89,47 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
       await import('why-is-node-running');
     }
 
-    const downloadPreviousBuildPromise = downloadPreviousBuild(rootSpan);
-    const buildCommonPromise = downloadPreviousBuildPromise.then(() => buildCommon(rootSpan));
+    const downloadPreviousBuildPromise = downloadPreviousBuild();
 
-    await Promise.all([
-      ...removesFiles.map(file => fsp.rm(file, { force: true })),
+    const traces: TraceResult[] = await Promise.all([
       downloadPreviousBuildPromise,
-      buildCommonPromise,
-      downloadPreviousBuildPromise.then(() => buildRejectIPList(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildAppleCdn(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildCdnDownloadConf(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildRejectDomainSet(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildTelegramCIDR(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildChnCidr(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildSpeedtestDomainSet(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildDomesticRuleset(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildRedirectModule(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildAlwaysRealIPModule(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildStreamService(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildMicrosoftCdn(rootSpan)),
-      Promise.all([
-        downloadPreviousBuildPromise,
-        buildCommonPromise
-      ]).then(() => buildSSPanelUIMAppProfile(rootSpan)),
-      downloadPreviousBuildPromise.then(() => buildCloudMounterRules(rootSpan)),
-      downloadMockAssets(rootSpan)
+      downloadPreviousBuildPromise.then(() => buildCommon()),
+      downloadPreviousBuildPromise.then(() => buildRejectIPList()),
+      downloadPreviousBuildPromise.then(() => buildAppleCdn()),
+      downloadPreviousBuildPromise.then(() => cdnDownloadWorker.buildCdnDownloadConf()),
+      downloadPreviousBuildPromise.then(() => buildRejectDomainSet()),
+      downloadPreviousBuildPromise.then(() => telegramCidrWorker.buildTelegramCIDR()),
+      downloadPreviousBuildPromise.then(() => buildChnCidr()),
+      downloadPreviousBuildPromise.then(() => buildSpeedtestDomainSet()),
+      downloadPreviousBuildPromise.then(() => buildDomesticRuleset()),
+      downloadPreviousBuildPromise.then(() => buildGlobalRuleset()),
+      downloadPreviousBuildPromise.then(() => buildRedirectModule()),
+      downloadPreviousBuildPromise.then(() => buildAlwaysRealIPModule()),
+      downloadPreviousBuildPromise.then(() => buildStreamService()),
+      downloadPreviousBuildPromise.then(() => microsoftCdnWorker.buildMicrosoftCdn()),
+      downloadPreviousBuildPromise.then(() => buildCloudMounterRules()),
+      mockAssetsWorker.downloadMockAssets()
     ]);
 
-    await buildDeprecateFiles(rootSpan);
-    await buildPublic(rootSpan);
-
-    rootSpan.stop();
-
-    printTraceResult(rootSpan.traceResult);
+    traces.push(
+      await buildDeprecateFiles(),
+      await buildPublic()
+    );
 
     // write a file to demonstrate that the build is finished
     fs.writeFileSync(buildFinishedLock, 'BUILD_FINISHED\n');
+
+    traces.forEach((t) => {
+      printTraceResult(t);
+    });
+    printStats(traces);
+
+    await Promise.all([
+      microsoftCdnWorker.end(),
+      cdnDownloadWorker.end(),
+      telegramCidrWorker.end(),
+      mockAssetsWorker.end()
+    ]);
 
     // Finish the build to avoid leaking timer/fetch ref
     await whyIsNodeRunning();

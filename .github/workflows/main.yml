@@ -7,6 +7,7 @@ on:
   schedule:
     - cron: '0 5 * * *'  # Runs at 05:00 UTC
     - cron: '0 17 * * *' # Runs at 1:00 UTC
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -20,13 +21,13 @@ jobs:
     steps:
       - uses: smorimoto/tune-github-hosted-runner-network@v1
         # https://github.com/actions/runner-images/issues/1187
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
         with:
           run_install: false
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version-file: ".node-version"
           cache: "pnpm"
@@ -35,7 +36,7 @@ jobs:
         run: |
           echo "build_dir=previous-build-${{ github.run_id }}-${{ github.run_number }}" >> $GITHUB_OUTPUT
       - name: Download Previous Build
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: SukkaLab/ruleset.skk.moe
           persist-credentials: false
@@ -66,7 +67,7 @@ jobs:
           echo "minute=$(date +'%M')" >> $GITHUB_OUTPUT
           echo "second=$(date +'%S')" >> $GITHUB_OUTPUT
       - name: Restore cache.db
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         id: cache-db-restore
         with:
           path: |
@@ -101,7 +102,7 @@ jobs:
             exit 1
           fi
           echo "public directory is ready: ${{ steps.ramdisk.outputs.build_dir }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: build-artifact-${{ github.sha }}-${{ github.run_number }}
           path: ${{ steps.ramdisk.outputs.build_dir }}
@@ -111,7 +112,7 @@ jobs:
           include-hidden-files: false
       - name: Cache cache.db
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: |
             .cache
@@ -122,9 +123,9 @@ jobs:
     needs:
       - build
     name: Diff output
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-slim
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: build-artifact-${{ github.sha }}-${{ github.run_number }}
           path: public
@@ -142,7 +143,7 @@ jobs:
       - build
     name: Deploy to Cloudflare Pages
     if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     # matrix is a tricky way to define a variable directly in the action yaml
     strategy:
       matrix:
@@ -152,7 +153,7 @@ jobs:
         id: npm_cache_path
         shell: sh
         run: echo dir=$(npm config get cache) >> $GITHUB_OUTPUT
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ${{ steps.npm_cache_path.outputs.dir }}
@@ -160,7 +161,7 @@ jobs:
           key: deploy-to-cloudflare-npm-${{ runner.os }}-${{ runner.arch }}-wrangler-${{ matrix.wranglerVersion }}
           restore-keys: |
             deploy-to-cloudflare-npm-${{ runner.os }}-${{ runner.arch }}-wrangler-
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: build-artifact-${{ github.sha }}-${{ github.run_number }}
           path: public
@@ -176,9 +177,9 @@ jobs:
       - build
     name: Deploy to GitHub and GitLab
     if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: build-artifact-${{ github.sha }}-${{ github.run_number }}
           path: public
@@ -213,14 +214,24 @@ jobs:
           git config --global user.name "${GH_USER}"
           rm -rf ./*
           cp -rf ../public/* ./
-          echo "ruleset.skk.moe" > CNAME
+          echo "ruleset-mirror.skk.moe" > CNAME
           git add --all .
           git commit -m "deploy: https://github.com/SukkaW/Surge/commit/${GITHUB_SHA}"
           git push --quiet --force origin HEAD:master
           cd ..
           rm -rf ./deploy-git
-          gh repo archive SukkaLab/ruleset.skk.moe --yes
+          # gh repo archive SukkaLab/ruleset.skk.moe --yes
         env:
           GH_EMAIL: ${{ secrets.GIT_EMAIL }}
           GH_USER: ${{ secrets.GIT_USER }}
           GH_TOKEN: ${{ secrets.GIT_TOKEN }}
+  remove_artifacts:
+    needs:
+      - deploy_to_cloudflare_pages
+      - deploy_to_github_gitlab
+    name: Remove Artifacts after Deployment
+    runs-on: ubuntu-slim
+    steps:
+      - uses: geekyeggo/delete-artifact@v6
+        with:
+          name: build-artifact-${{ github.sha }}-${{ github.run_number }}

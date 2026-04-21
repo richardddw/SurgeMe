@@ -1,7 +1,7 @@
 import { describe, it } from 'mocha';
 
 import { processLine } from './process-line';
-import { expect } from 'expect';
+import { expect } from 'earl';
 
 describe('processLine', () => {
   ([
@@ -16,7 +16,7 @@ describe('processLine', () => {
     ['##### EOF', null]
   ] as const).forEach(([input, expected]) => {
     it(input, () => {
-      expect(processLine(input)).toBe(expected);
+      expect(processLine(input)).toEqual(expected);
     });
   });
 });

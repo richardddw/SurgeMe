@@ -1,6 +1,6 @@
 # Sukka Ruleset
 
-由 [Sukka](https://skk.moe) 搜集、整理、维护的、个人自用的、适用于 [Surge](https://nssurge.com/)、[Clash Meta (mihomo)](https://wiki.metacubex.one/)、[Clash Premium (Dreamacro)](https://web.archive.org/web/20230521135419/https://dreamacro.github.io/clash/premium/rule-providers.html)、[sing-box](https://sing-box.sagernet.org/)、[Surfboard for Android](https://getsurfboard.com) 和 [Stash](https://stash.ws/) 的 Ruleset Snippet。
+由 [Sukka](https://skk.moe) 搜集、整理、维护的、个人自用的、适用于 [Surge](https://nssurge.com/)、[Mihomo](https://wiki.metacubex.one/)、[Clash Premium (Dreamacro)](https://web.archive.org/web/20230521135419/https://dreamacro.github.io/clash/premium/rule-providers.html)、[sing-box](https://sing-box.sagernet.org/)、[Surfboard for Android](https://getsurfboard.com) 和 [Stash](https://stash.ws/) 的 Ruleset Snippet。
 
 ## 条款和协议
 
@@ -27,12 +27,12 @@
   - `/List/domainset/`：`DOMAIN-SET`，不会触发 DNS 解析的、仅包含域名的规则组
   - `/List/non_ip/`：`RULE-SET`，不会触发 DNS 解析的规则组
   - `/List/ip/`：`RULE-SET`，会触发 DNS 解析的规则组
-- **Mihomo (Clash.Meta)**
+- **Mihomo**
   - `/Clash/domainset/`：`domain & text`，不会触发 DNS 解析的、仅域名的规则组截至 2025 年 5 月 3 日 UTC+0，Mihomo 仅针对 behavior 为 domain 和 ipcidr 的规则组进行了优化
   - `/Clash/non_ip/`：`classical & text`，不会触发 DNS 解析的规则组
   - `/Clash/ip/`：`classical & text` 或 `ipcidr & text`，会触发 DNS 解析的规则组
 - **Clash Premium (Dreamacro)**
-  - 不单独提供 `/LegacyClashPremium/domainset/` 的 DOMAIN SET 的格式，请使用 Mihomo (Clash.Meta) 的 DOMAIN SET 规则组（`/Clash/domainset/`），behavior 和 format 一致。
+  - 不单独提供 `/LegacyClashPremium/domainset/` 的 DOMAIN SET 的格式，请使用 Mihomo 的 DOMAIN SET 规则组（`/Clash/domainset/`），behavior 和 format 一致。
   - `/LegacyClashPremium/non_ip/`：`classical & text`，不会触发 DNS 解析的规则组
   - `/LegacyClashPremium/ip/`：`classical & text` 或 `ipcidr & text`，会触发 DNS 解析的规则组
 - **sing-box**，sing-box 只提供一种规则格式 Headless Rule 且有优化
@@ -44,9 +44,11 @@
   - `/Surfboard/non_ip/`：`RULE-SET`，不会触发 DNS 解析的规则
   - `/Surfboard/ip/`：`RULE-SET`，会触发 DNS 解析的规则
 
-**请务必按照 `domainset`、`non_ip`、`ip`，和 README 中的顺序 将规则组添加到你的配置文件中，确保所有 `domainset` 或 `non_ip` 规则组 位于所有的 `ip` 规则组之前**。
+**请务必按照 `domainset`、`non_ip`、`ip`，和 README 中的顺序 将规则组添加到你的配置文件中，请 务必确保 所有 `domainset` 或 `non_ip` 规则组、以及你自己额外添加的 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD` 规则，必须放置在所有的 `ip` 规则组、你自己添加的 `IP-CIDR`、`IP-CIDR6`、`IP-ASN` 和 `GEOIP` 规则之前，没有任何例外。**
 
-> Surge、Clash、Surfboard 会按照规则在配置中的顺序、从上到下逐一匹配，当且仅当进行 IP 规则的匹配、FINAL、或 direct 策略时，才会进行 DNS 解析。按照一定的顺序添加规则组，可以避免本地发生不必要的 DNS 解析、从而提供一定程度的所谓「DNS 污染」的保护。
+假如 你将任何一个 `ip` 规则组、或你自己的 `IP-CIDR`、`IP-CIDR6`、`IP-ASN` 和 `GEOIP` 规则放置在任何一个 `domainset` 或 `non_ip` 规则组、你自己额外添加的 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD` 规则之前，**那么你会立刻失去 Surge、Clash、Mihomo、Surfboard、以及本项目 为你提供的 DNS 污染保护，你将会彻底暴露在 GFW 的 DNS 污染之下。**
+
+> Surge、Clash、Mihomo、Surfboard 会按照规则在配置中的顺序、从上到下逐一匹配，当且仅当进行 IP 类规则的匹配、FINAL、或 direct 策略时，才会进行 DNS 解析。按照上述顺序添加规则组，可以尽可能避免你的设备对需要被代理的域名发起 DNS 解析、从而提供一定程度的所谓「DNS 污染」的保护。
 
 #### 广告拦截 / 隐私保护 / Malware 拦截 / Phishing 拦截
 
@@ -59,6 +61,8 @@
 
 ```ini
 # Non IP
+RULE-SET,https://ruleset.skk.moe/List/non_ip/reject-drop.conf,REJECT-DROP,pre-matching
+
 # 基础的 12 万拦截域名
 DOMAIN-SET,https://ruleset.skk.moe/List/domainset/reject.conf,REJECT,extended-matching
 # 额外 9 万拦截域名，作为基础的补充，启用时需要搭配基础一起使用
@@ -68,17 +72,18 @@ DOMAIN-SET,https://ruleset.skk.moe/List/domainset/reject_extra.conf,REJECT
 # DOMAIN-SET,https://ruleset.skk.moe/List/domainset/reject_phishing.conf,REJECT
 RULE-SET,https://ruleset.skk.moe/List/non_ip/reject.conf,REJECT,extended-matching
 RULE-SET,https://ruleset.skk.moe/List/non_ip/reject-no-drop.conf,REJECT-NO-DROP,extended-matching
-RULE-SET,https://ruleset.skk.moe/List/non_ip/reject-drop.conf,REJECT-DROP,pre-matching
 # URL-REGEX
 # 需搭配 Surge 模块 https://ruleset.skk.moe/Modules/sukka_mitm_hostnames.sgmodule 使用
 # MITM 和 URL-REGEX 性能开销极大，不推荐使用
 # RULE-SET,https://ruleset.skk.moe/List/non_ip/reject-url-regex.conf,REJECT
+```
 
+```ini
 # IP
 RULE-SET,https://ruleset.skk.moe/List/ip/reject.conf,REJECT-DROP
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -125,15 +130,21 @@ rule-providers:
     interval: 43200
     url: https://ruleset.skk.moe/Clash/ip/reject.txt
     path: ./sukkaw_ruleset/reject_ip.txt
+```
 
+```yaml
+# Non IP
 rules:
-  - RULE-SET,reject_non_ip,REJECT
-
+  - RULE-SET,reject_non_ip_drop,REJECT-DROP
   - RULE-SET,reject_domainset,REJECT
   - RULE-SET,reject_extra_domainset,REJECT
-
-  - RULE-SET,reject_non_ip_drop,REJECT-DROP
+  - RULE-SET,reject_non_ip,REJECT
   - RULE-SET,reject_non_ip_no_drop,REJECT
+```
+
+```yaml
+# IP
+rules:
   - RULE-SET,reject_ip,REJECT
 ```
 
@@ -149,7 +160,7 @@ rules:
 RULE-SET,https://ruleset.skk.moe/List/non_ip/sogouinput.conf,REJECT
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -178,7 +189,7 @@ rules:
 DOMAIN-SET,https://ruleset.skk.moe/List/domainset/speedtest.conf,[Replace with your policy],extended-matching
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -208,7 +219,7 @@ DOMAIN-SET,https://ruleset.skk.moe/List/domainset/cdn.conf,[Replace with your po
 RULE-SET,https://ruleset.skk.moe/List/non_ip/cdn.conf,[Replace with your policy]
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -240,30 +251,42 @@ rules:
 **Surge**
 
 ```ini
+# Non IP
 # 北美相关流媒体
 RULE-SET,https://ruleset.skk.moe/List/non_ip/stream_us.conf,[Replace with your policy]
-RULE-SET,https://ruleset.skk.moe/List/ip/stream_us.conf,[Replace with your policy]
 # 欧洲相关流媒体
 RULE-SET,https://ruleset.skk.moe/List/non_ip/stream_eu.conf,[Replace with your policy]
-RULE-SET,https://ruleset.skk.moe/List/ip/stream_eu.conf,[Replace with your policy]
 # 日本相关流媒体
 RULE-SET,https://ruleset.skk.moe/List/non_ip/stream_jp.conf,[Replace with your policy]
-RULE-SET,https://ruleset.skk.moe/List/ip/stream_jp.conf,[Replace with your policy]
 # 韩国相关流媒体
 RULE-SET,https://ruleset.skk.moe/List/non_ip/stream_kr.conf,[Replace with your policy]
-RULE-SET,https://ruleset.skk.moe/List/ip/stream_kr.conf,[Replace with your policy]
 # 香港相关流媒体
 RULE-SET,https://ruleset.skk.moe/List/non_ip/stream_hk.conf,[Replace with your policy]
-RULE-SET,https://ruleset.skk.moe/List/ip/stream_hk.conf,[Replace with your policy]
 # 台湾相关流媒体
 RULE-SET,https://ruleset.skk.moe/List/non_ip/stream_tw.conf,[Replace with your policy]
-RULE-SET,https://ruleset.skk.moe/List/ip/stream_tw.conf,[Replace with your policy]
 # 所有流媒体（包括上述所有流媒体）
 RULE-SET,https://ruleset.skk.moe/List/non_ip/stream.conf,[Replace with your policy]
+```
+
+```ini
+# IP
+# 北美相关流媒体
+RULE-SET,https://ruleset.skk.moe/List/ip/stream_us.conf,[Replace with your policy]
+# 欧洲相关流媒体
+RULE-SET,https://ruleset.skk.moe/List/ip/stream_eu.conf,[Replace with your policy]
+# 日本相关流媒体
+RULE-SET,https://ruleset.skk.moe/List/ip/stream_jp.conf,[Replace with your policy]
+# 韩国相关流媒体
+RULE-SET,https://ruleset.skk.moe/List/ip/stream_kr.conf,[Replace with your policy]
+# 香港相关流媒体
+RULE-SET,https://ruleset.skk.moe/List/ip/stream_hk.conf,[Replace with your policy]
+# 台湾相关流媒体
+RULE-SET,https://ruleset.skk.moe/List/ip/stream_tw.conf,[Replace with your policy]
+# 所有流媒体（包括上述所有流媒体）
 RULE-SET,https://ruleset.skk.moe/List/ip/stream.conf,[Replace with your policy]
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -372,7 +395,10 @@ rule-providers:
     interval: 43200
     url: https://ruleset.skk.moe/Clash/ip/stream.txt
     path: ./sukkaw_ruleset/stream_ip.txt
+```
 
+```yaml
+# Non IP
 rules:
   - RULE-SET,stream_us_non_ip,[Replace with your policy]
   - RULE-SET,stream_eu_non_ip,[Replace with your policy]
@@ -381,7 +407,11 @@ rules:
   - RULE-SET,stream_hk_non_ip,[Replace with your policy]
   - RULE-SET,stream_tw_non_ip,[Replace with your policy]
   - RULE-SET,stream_non_ip,[Replace with your policy]
+```
 
+```yaml
+# IP
+rules:
   - RULE-SET,stream_us_ip,[Replace with your policy]
   - RULE-SET,stream_eu_ip,[Replace with your policy]
   - RULE-SET,stream_jp_ip,[Replace with your policy]
@@ -400,9 +430,10 @@ rules:
 
 ```ini
 RULE-SET,https://ruleset.skk.moe/List/non_ip/ai.conf,[Replace with your policy]
+RULE-SET,https://ruleset.skk.moe/List/non_ip/apple_intelligence.conf,[Replace with your policy],extended-matching
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -413,9 +444,17 @@ rule-providers:
     interval: 43200
     url: https://ruleset.skk.moe/Clash/non_ip/ai.txt
     path: ./sukkaw_ruleset/ai_non_ip.txt
+  apple_intelligence_non_ip:
+    type: http
+    behavior: classical
+    format: text
+    interval: 43200
+    url: https://ruleset.skk.moe/Clash/non_ip/apple_intelligence.txt
+    path: ./sukkaw_ruleset/apple_intelligence_non_ip.txt
 
 rules:
   - RULE-SET,ai_non_ip,[Replace with your policy]
+  - RULE-SET,apple_intelligence_non_ip,[Replace with your policy]
 ```
 
 #### Telegram
@@ -430,12 +469,17 @@ rules:
 **Surge**
 
 ```ini
+# Non IP
 RULE-SET,https://ruleset.skk.moe/List/non_ip/telegram.conf,[Replace with your policy]
+```
+
+```ini
+# IP
 RULE-SET,https://ruleset.skk.moe/List/ip/telegram.conf,[Replace with your policy]
 RULE-SET,https://ruleset.skk.moe/List/ip/telegram_asn.conf,[Replace with your policy]
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -453,9 +497,17 @@ rule-providers:
     interval: 43200
     url: https://ruleset.skk.moe/Clash/ip/telegram.txt
     path: ./sukkaw_ruleset/telegram_ip.txt
+```
 
+```yaml
+# Non IP
 rules:
   - RULE-SET,telegram_non_ip,[Replace with your policy]
+```
+
+```yaml
+# IP
+rules:
   - RULE-SET,telegram_ip,[Replace with your policy]
 ```
 
@@ -471,7 +523,7 @@ rules:
 DOMAIN-SET,https://ruleset.skk.moe/List/domainset/apple_cdn.conf,[Replace with your policy]
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -497,7 +549,7 @@ rules:
 RULE-SET,https://ruleset.skk.moe/List/non_ip/apple_services.conf,[Replace with your policy]
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -524,7 +576,7 @@ rules:
 RULE-SET,https://ruleset.skk.moe/List/non_ip/apple_cn.conf,DIRECT
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -552,7 +604,7 @@ rules:
 RULE-SET,https://ruleset.skk.moe/List/non_ip/microsoft_cdn.conf,[Replace with your policy]
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -578,7 +630,7 @@ rules:
 RULE-SET,https://ruleset.skk.moe/List/non_ip/microsoft.conf,[Replace with your policy]
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -601,11 +653,16 @@ rules:
 **Surge**
 
 ```ini
+# Non IP
 RULE-SET,https://ruleset.skk.moe/List/non_ip/neteasemusic.conf,[Replace with your policy]
+```
+
+```ini
+# IP
 RULE-SET,https://ruleset.skk.moe/List/ip/neteasemusic.conf,[Replace with your policy]
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -623,9 +680,17 @@ rule-providers:
     interval: 43200
     url: https://ruleset.skk.moe/Clash/ip/neteasemusic.txt
     path: ./sukkaw_ruleset/neteasemusic_ip.txt
+```
 
+```yaml
+# Non IP
 rules:
   - RULE-SET,neteasemusic_non_ip,[Replace with your policy]
+```
+
+```yaml
+# IP
+rules:
   - RULE-SET,neteasemusic_ip,[Replace with your policy]
 ```
 
@@ -643,7 +708,7 @@ DOMAIN-SET,https://ruleset.skk.moe/List/domainset/download.conf,[Replace with yo
 RULE-SET,https://ruleset.skk.moe/List/non_ip/download.conf,[Replace with your policy]
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -678,11 +743,14 @@ rules:
 ```ini
 # Non IP
 RULE-SET,https://ruleset.skk.moe/List/non_ip/lan.conf,DIRECT
+```
+
+```ini
 # IP
 RULE-SET,https://ruleset.skk.moe/List/ip/lan.conf,DIRECT
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -700,9 +768,17 @@ rule-providers:
     interval: 43200
     url: https://ruleset.skk.moe/Clash/ip/lan.txt
     path: ./sukkaw_ruleset/lan_ip.txt
+```
 
+```yaml
+# Non IP
 rules:
   - RULE-SET,lan_non_ip,DIRECT
+```
+
+```yaml
+# IP
+rules:
   - RULE-SET,lan_ip,DIRECT
 ```
 
@@ -713,13 +789,18 @@ rules:
 **Surge**
 
 ```ini
+# Non IP
 RULE-SET,https://ruleset.skk.moe/List/non_ip/domestic.conf,[Replace with your policy]
 RULE-SET,https://ruleset.skk.moe/List/non_ip/direct.conf,[Replace with your policy]
 RULE-SET,https://ruleset.skk.moe/List/non_ip/global.conf,[Replace with your policy]
+```
+
+```ini
+# IP
 RULE-SET,https://ruleset.skk.moe/List/ip/domestic.conf,[Replace with your policy]
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -751,11 +832,19 @@ rule-providers:
     interval: 43200
     url: https://ruleset.skk.moe/Clash/ip/domestic.txt
     path: ./sukkaw_ruleset/domestic_ip.txt
+```
 
+```yaml
+# Non IP
 rules:
   - RULE-SET,domestic_non_ip,[Replace with your policy]
   - RULE-SET,direct_non_ip,[Replace with your policy]
   - RULE-SET,global_non_ip,[Replace with your policy]
+```
+
+```yaml
+# IP
+rules:
   - RULE-SET,domestic_ip,[Replace with your policy]
 ```
 
@@ -773,7 +862,7 @@ RULE-SET,https://ruleset.skk.moe/List/ip/china_ip.conf,[Replace with your policy
 # RULE-SET,https://ruleset.skk.moe/List/ip/china_ip_ipv6.conf,[Replace with your policy]
 ```
 
-**Clash Meta**
+**Mihomo**
 
 ```yaml
 rule-providers:
@@ -815,7 +904,7 @@ rules:
 
 **有适用于 Clash 的规则组吗？**
 
-规则组支持 Clash Meta（mihomo）。「Surge 模块」不适用于任何版本的 Clash。
+规则组支持 Mihomo（mihomo）。「Surge 模块」不适用于任何版本的 Clash。
 
 **有适用于 Shadowrocket、Quantumult X、Loon、V2RayNG 的规则组吗？**
 
