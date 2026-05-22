@@ -27,10 +27,8 @@ if (!fs.existsSync(CACHE_DIR)) {
 }
 
 const agent = new Agent({
-  allowH2: true
-});
-
-agent.compose(
+  allowH2: false
+}).compose(
   interceptors.dns({
     // disable IPv6
     dualStack: false,
@@ -41,6 +39,11 @@ agent.compose(
     maxRetries: 5,
     minTimeout: 500, // The initial retry delay in milliseconds
     maxTimeout: 10 * 1000, // The maximum retry delay in milliseconds
+
+    // Undici still uses `statusCodes` as the first gate for HTTP response retries.
+    // Our custom `retry()` callback only runs after a response status is admitted here,
+    // so we must list our status codes here before we can read it in our retry callback.
+    statusCodes: [404, 429, 500, 502, 503, 504],
 
     // TODO: this part of code is only for allow more errors to be retried by default
     // This should be removed once https://github.com/nodejs/undici/issues/3728 is implemented
@@ -54,6 +57,7 @@ agent.compose(
       // Any code that is not a Undici's originated and allowed to retry
       if (
         errorCode === 'ERR_UNESCAPED_CHARACTERS'
+        || errorCode === 'UND_ERR_DESTROYED'
         || err.message === 'Request path contains unescaped characters'
         || err.name === 'AbortError'
       ) {
@@ -68,11 +72,20 @@ agent.compose(
         && (
           statusCode === 401 // Unauthorized, should check credentials instead of retrying
           || statusCode === 403 // Forbidden, should check permissions instead of retrying
-          || statusCode === 404 // Not Found, should check URL instead of retrying
+          // || statusCode === 404 // Not Found, should check URL instead of retrying
           || statusCode === 405 // Method Not Allowed, should check method instead of retrying
         )
       ) {
         return cb(err);
+      }
+
+      const origin = opts.origin?.toString();
+      if (statusCode === 404) {
+        if (origin?.includes('cdn.jsdelivr.net')) {
+          // continue retry anyway, jsDelivr has recently broken and return HTTP 404 for bad origin
+        } else {
+          return cb(err);
+        }
       }
 
       // if (errorCode === 'UND_ERR_REQ_RETRY') {
