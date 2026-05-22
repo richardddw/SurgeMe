@@ -164,7 +164,7 @@ export const HOSTS = {
     // not actually used, only for a placeholder
     dns: '',
     hosts: {
-      'cdn.jsdelivr.net': ['cdn.jsdelivr.net.cdn.cloudflare.net']
+      'cdn.jsdelivr.net': ['testingcf.jsdelivr.net']
     },
     realip: false,
     ruleset: false,
