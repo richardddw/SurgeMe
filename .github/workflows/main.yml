@@ -5,8 +5,8 @@ on:
       - master
   pull_request:
   schedule:
-    - cron: '17 5 * * *'  # Runs at 05:17 UTC
-    - cron: '17 17 * * *' # Runs at 17:17 UTC
+    - cron: "17 5 * * *" # Runs at 05:17 UTC
+    - cron: "17 17 * * *" # Runs at 17:17 UTC
   workflow_dispatch:
 
 concurrency:
@@ -69,7 +69,7 @@ jobs:
           echo "minute=$(date +'%M')" >> $GITHUB_OUTPUT
           echo "second=$(date +'%S')" >> $GITHUB_OUTPUT
       - name: Restore cache.db
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         id: cache-db-restore
         with:
           path: |
@@ -83,6 +83,7 @@ jobs:
             ${{ runner.os }}-v3-${{ steps.date.outputs.year }}-${{ steps.date.outputs.month }}-
             ${{ runner.os }}-v3-${{ steps.date.outputs.year }}-
             ${{ runner.os }}-v3-
+      - run: pnpm config set --location=global minimumReleaseAge 0
       - run: pnpm install
       - run: pnpm run build
         env:
@@ -114,7 +115,7 @@ jobs:
           include-hidden-files: false
       - name: Cache cache.db
         if: always()
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: |
             .cache
@@ -143,22 +144,22 @@ jobs:
           GH_USER: ${{ secrets.GIT_USER }}
           GH_TOKEN: ${{ secrets.GIT_TOKEN }}
 
-  deploy_to_cloudflare_pages:
+  deploy:
     needs:
       - build
-    name: Deploy to Cloudflare Pages
+    name: Deploy
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-slim
     # matrix is a tricky way to define a variable directly in the action yaml
     strategy:
       matrix:
-        wranglerVersion: ['3.114.12']
+        wranglerVersion: ["3.114.12"]
     steps:
       - name: Get NPM cache directory path
         id: npm_cache_path
         shell: sh
         run: echo dir=$(npm config get cache) >> $GITHUB_OUTPUT
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: |
             ${{ steps.npm_cache_path.outputs.dir }}
@@ -170,87 +171,87 @@ jobs:
         with:
           name: build-artifact-${{ github.sha }}-${{ github.run_number }}
           path: public
-      - uses: cloudflare/wrangler-action@v3
+      - name: Prepare GitHub Pages deployment marker
+        id: deploy_marker
+        run: |
+          echo "marker_content=${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> $GITHUB_OUTPUT
+      - name: Remove build artifact
+        uses: geekyeggo/delete-artifact@v6
+        background: true
+        with:
+          name: build-artifact-${{ github.sha }}-${{ github.run_number }}
+      # Deploy to Cloudflare, GitLab, and GitHub in parallel
+      - name: Deploy to Cloudflare Pages
+        id: deploy_cloudflare
+        uses: cloudflare/wrangler-action@v3
+        background: true
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy public --project-name=sukkaw-ruleset --commit-dirty=true --branch=main
           wranglerVersion: ${{ matrix.wranglerVersion }}
-
-  deploy_to_github_gitlab:
-    needs:
-      - build
-    name: Deploy to GitHub and GitLab
-    if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-slim
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: build-artifact-${{ github.sha }}-${{ github.run_number }}
-          path: public
       - name: Upload Dist to GitLab
-        continue-on-error: true
+        id: deploy_gitlab
+        background: true
         run: |
-          git clone --filter=tree:0 --no-tags https://${GITLAB_TOKEN_NAME}:${GITLAB_TOKEN}@gitlab.com/SukkaW/ruleset.skk.moe.git ./deploy-git
-          cd ./deploy-git
-          git config --global push.dgefault matching
-          git config --global user.email "${GITLAB_EMAIL}"
-          git config --global user.name "${GITLAB_USER}"
+          git clone --filter=tree:0 --no-tags https://${GITLAB_TOKEN_NAME}:${GITLAB_TOKEN}@gitlab.com/SukkaW/ruleset.skk.moe.git ./deploy-git-gitlab
+          cd ./deploy-git-gitlab
+          git config push.default matching
+          git config user.email "${GITLAB_EMAIL}"
+          git config user.name "${GITLAB_USER}"
           rm -rf ./*
           cp -rf ../public/* ./
           git add --all .
           git commit -m "deploy: https://github.com/SukkaW/Surge/commit/${GITHUB_SHA}"
           git push --quiet --force origin HEAD:master
           cd ..
-          rm -rf ./deploy-git
+          rm -rf ./deploy-git-gitlab
         env:
           GITLAB_EMAIL: ${{ secrets.GITLAB_EMAIL }}
           GITLAB_USER: ${{ secrets.GITLAB_USER }}
           GITLAB_TOKEN_NAME: ${{ secrets.GITLAB_TOKEN_NAME }}
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
-      - name: Prepare GitHub Pages deployment marker
-        id: deploy_marker
-        run: |
-          echo "marker_file=deploy-check-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt" >> $GITHUB_OUTPUT
       - name: Upload Dist to GitHub
         id: upload_dist_to_github
-        continue-on-error: true
+        background: true
         run: |
           gh repo unarchive SukkaLab/ruleset.skk.moe --yes
-          git clone --filter=tree:0 --no-tags https://${GH_USER}:${GH_TOKEN}@github.com/SukkaLab/ruleset.skk.moe.git ./deploy-git
-          cd ./deploy-git
-          git config --global push.default matching
-          git config --global user.email "${GH_EMAIL}"
-          git config --global user.name "${GH_USER}"
+          git clone --filter=tree:0 --no-tags https://${GH_USER}:${GH_TOKEN}@github.com/SukkaLab/ruleset.skk.moe.git ./deploy-git-github
+          cd ./deploy-git-github
+          git config push.default matching
+          git config user.email "${GH_EMAIL}"
+          git config user.name "${GH_USER}"
           rm -rf ./*
           cp -rf ../public/* ./
           echo "ruleset-mirror.skk.moe" > CNAME
-          : > "${{ steps.deploy_marker.outputs.marker_file }}"
+          echo "${{ steps.deploy_marker.outputs.marker_content }}" > deploy-check.txt
           git add --all .
           git commit -m "deploy: https://github.com/SukkaW/Surge/commit/${GITHUB_SHA}"
           git push --quiet --force origin HEAD:master
           cd ..
-          rm -rf ./deploy-git
+          rm -rf ./deploy-git-github
         env:
           GH_EMAIL: ${{ secrets.GIT_EMAIL }}
           GH_USER: ${{ secrets.GIT_USER }}
           GH_TOKEN: ${{ secrets.GIT_TOKEN }}
+      - wait: upload_dist_to_github
       - name: Wait for GitHub Pages to serve deployed marker
         if: steps.upload_dist_to_github.outcome == 'success'
         id: wait_for_github_pages
         run: |
-          marker_file="${{ steps.deploy_marker.outputs.marker_file }}"
-          marker_url="https://ruleset-mirror.skk.moe/${marker_file}"
+          expected="${{ steps.deploy_marker.outputs.marker_content }}"
+          marker_url="https://ruleset-mirror.skk.moe/deploy-check.txt"
 
           for _ in $(seq 1 30); do
-            if curl --fail --silent --show-error --location --head "${marker_url}" >/dev/null; then
-              echo "GitHub Pages is serving ${marker_file}"
+            content=$(curl --fail --silent --show-error --location "${marker_url}" || true)
+            if [ "${content}" = "${expected}" ]; then
+              echo "GitHub Pages is serving the correct deploy marker"
               exit 0
             fi
             sleep 10
           done
 
-          echo "Timed out waiting for GitHub Pages deployment: ${marker_url}"
+          echo "Timed out waiting for GitHub Pages deployment"
           exit 1
       - name: Archive dist repo
         if: steps.wait_for_github_pages.outcome == 'success'
@@ -258,13 +259,4 @@ jobs:
           gh repo archive SukkaLab/ruleset.skk.moe --yes
         env:
           GH_TOKEN: ${{ secrets.GIT_TOKEN }}
-  remove_artifacts:
-    needs:
-      - deploy_to_cloudflare_pages
-      - deploy_to_github_gitlab
-    name: Remove Artifacts after Deployment
-    runs-on: ubuntu-slim
-    steps:
-      - uses: geekyeggo/delete-artifact@v6
-        with:
-          name: build-artifact-${{ github.sha }}-${{ github.run_number }}
+      - wait-all:
