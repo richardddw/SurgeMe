@@ -9,6 +9,10 @@ import { OUTPUT_MODULES_DIR, OUTPUT_SURGE_DIR } from '../../constants/dir';
 import { withBannerArray, withIdentityContent } from '../misc';
 import { MARKER_DOMAIN } from '../../constants/description';
 
+const rChar = /([a-z])\?/g;
+const rWildcard = /\*+/g;
+const rPattern = /\((?:([^()|]+)\|)+([^()|]*)\)/g;
+
 export class SurgeDomainSet extends BaseWriteStrategy {
   public readonly name = 'surge domainset';
 
@@ -150,6 +154,9 @@ export class SurgeMitmSgmodule extends BaseWriteStrategy {
 
   private readonly rules = new Set<string>();
 
+  // #!desc only carries a size derived from the rules, no volatile date
+  protected override readonly skipCompareOnCI = true;
+
   protected get result() {
     if (this.rules.size === 0) {
       return null;
@@ -204,15 +211,15 @@ export class SurgeMitmSgmodule extends BaseWriteStrategy {
         // pre process regex
         .replaceAll(String.raw`\.`, '.')
         .replaceAll('.+', '*')
-        .replaceAll(/([a-z])\?/g, '($1|)')
+        .replaceAll(rChar, '($1|)')
         // convert regex to surge hostlist syntax
         .replaceAll('([a-z])', '?')
         .replaceAll(String.raw`\d`, '?')
-        .replaceAll(/\*+/g, '*');
+        .replaceAll(rWildcard, '*');
 
       let processed: string[] = [potentialHostname];
 
-      const matches = [...potentialHostname.matchAll(/\((?:([^()|]+)\|)+([^()|]*)\)/g)];
+      const matches = [...potentialHostname.matchAll(rPattern)];
 
       if (matches.length > 0) {
         const replaceVariant = (combinations: string[], fullMatch: string, options: string[]): string[] => {
@@ -227,7 +234,7 @@ export class SurgeMitmSgmodule extends BaseWriteStrategy {
           return newCombinations;
         };
 
-        for (let i = 0; i < matches.length; i++) {
+        for (let i = 0, len = matches.length; i < len; i++) {
           const match = matches[i];
           const [_, ...options] = match;
 
@@ -241,8 +248,10 @@ export class SurgeMitmSgmodule extends BaseWriteStrategy {
       });
     }
 
-    for (const i of urlRegexResults) {
-      for (const processed of i.processed) {
+    for (let i = 0, len = urlRegexResults.length; i < len; i++) {
+      const result = urlRegexResults[i];
+      for (let j = 0, len2 = result.processed.length; j < len2; j++) {
+        const processed = result.processed[j];
         if (
           normalizeDomain(
             processed
@@ -250,9 +259,9 @@ export class SurgeMitmSgmodule extends BaseWriteStrategy {
               .replaceAll('?', 'b')
           )
         ) {
-          parsed.push([i.origin, processed]);
+          parsed.push([result.origin, processed]);
         } else if (!isProbablyIpv4(processed)) {
-          parsedFailures.push([i.origin, processed]);
+          parsedFailures.push([result.origin, processed]);
         }
       }
     }

@@ -3,6 +3,8 @@ import { noop } from 'foxts/noop';
 import { basename, extname } from 'node:path';
 import process from 'node:process';
 import picocolors from 'picocolors';
+import { mergeExternalDownloadStats, takeExternalDownloadStats } from '../lib/download-stats';
+import type { ExternalDownloadStatsSnapshot } from '../lib/download-stats';
 
 export const SPAN_STATUS_START = 0;
 export const SPAN_STATUS_END = 1;
@@ -82,8 +84,9 @@ export function makeSpan(rawSpan: RawSpan): Span {
 
     async traceWorkerChild<T>(name: string, factory: (rawSpan: RawSpan) => Promise<WorkerJobResult<T>>): Promise<T> {
       const childSpan = traceChild(name);
-      const { result, traceResult, workerTimeOrigin } = await factory(childSpan.rawSpan);
+      const { result, traceResult, workerTimeOrigin, externalDownloadStats } = await factory(childSpan.rawSpan);
       mergeWorkerTrace(childSpan, traceResult, workerTimeOrigin);
+      mergeExternalDownloadStats(externalDownloadStats);
       childSpan.stop();
       return result;
     }
@@ -198,7 +201,8 @@ function mergeWorkerTrace(
   workerTimeOrigin: number
 ): void {
   const offset = workerTimeOrigin - performance.timeOrigin;
-  for (const child of workerTraceResult.children) {
+  for (let i = 0, len = workerTraceResult.children.length; i < len; i++) {
+    const child = workerTraceResult.children[i];
     parentSpan.traceResult.children.push(adjustTraceTimestamps(child, offset));
   }
 }
@@ -207,7 +211,8 @@ function mergeWorkerTrace(
 export interface WorkerJobResult<T> {
   result: T,
   traceResult: TraceResult,
-  workerTimeOrigin: number
+  workerTimeOrigin: number,
+  externalDownloadStats: ExternalDownloadStatsSnapshot
 }
 
 /**
@@ -231,7 +236,8 @@ export async function workerJob<T>(
   return {
     result,
     traceResult: span.traceResult,
-    workerTimeOrigin: performance.timeOrigin
+    workerTimeOrigin: performance.timeOrigin,
+    externalDownloadStats: takeExternalDownloadStats()
   };
 }
 

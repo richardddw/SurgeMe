@@ -4,8 +4,9 @@ import fsp from 'node:fs/promises';
 import { SOURCE_DIR } from './constants/dir';
 import { readFileByLine } from './lib/fetch-text-by-line';
 import { processLine } from './lib/process-line';
-import { HostnameSmolTrie } from './lib/trie';
+import { HostnameSmolTrie } from 'hntrie/smol';
 import { task } from './trace';
+import { fastStringArrayJoin } from 'foxts/fast-string-array-join';
 
 const ENFORCED_WHITELIST = [
   'hola.sk',
@@ -19,13 +20,11 @@ const ENFORCED_WHITELIST = [
   'samsungcloudsolution.com',
   'samsungcloudsolution.net',
   'samsungqbe.com',
-  'ntp.api.bz',
-  'cdn.tuk.dev',
-  'vocadb-analytics.fly.dev',
-  'img.vim-cn.com'
+  'vocadb-analytics.fly.dev'
 ];
 
-const DEDUPE_LIST: string[] = ['127.atlas.skk.moe', 'ntp.api.bz', 'httpdns.bilivideo.com', 'dns.qiyipic.iqiyi.com', 'cdn.graph.office.net', 'dns.iqiyi.com', 'img.vim-cn.com', 'image.westinyou.com', 'edge1.certona.net', 'certona.gap.com', 'yep.video.yahoo.com', 'static.opensea.io', 'shopify.cleverecommerce.com', 'tile.mapzen.com', 'cdn.cracked.sh', 'images.idgesg.net', 'drive.massgrave.dev', 'alt.idgesg.net', 'mirror.ghproxy.com', 'mirror.nl.datapacket.com', 'mirror.anigil.com', 'mirror.nus.edu.sg', 'mirror.timkevin.us', 'mirrors.nic.cz', 'cpan.tetaneutral.net', 'mirror.datapacket.com', 'client.hikarifield.co.jp', 'a.macked.app', 'apache.tt.co.kr', 'fm.p0y.cn', 'iyes.youku.com', 'ad.api.mobile.youku.com', 'c.yes.youku.com', 'ad.jamster.co.uk', 'fumiad.dxys.pro', 'ad.leadboltapps.net', 'ems.cp12.wasu.tv', 'creative1cdn.mobfox.com', 'mycommerce.akamaized.net', 'js-cdn.blockchair.io', 'loutre.blockchair.io', 'static.namebeta.com', 'fs2.onlyhentaistuff.com', 'file.izanmei.net', 'play.xiaoh.ai', 'file.xiaohai.ai', 'tiles.wmflabs.org', 'image.stheadline.com', 'vod.jfly.xyz', 'assets.wikiwand.com', 'cdn.wikiwand.com', 'cloudfront.codeproject.com', 'assets-cdn.anh.moe', 'media.d.tube', 'media.remax-prod.eng.remax.tech', 'static-landing.probiplacehold.cot.com'];
+const DEDUPE_LIST: string[] = ['adx-static.ksosoft.com', 'dns.iqiyi.com', 'domain.expiring-soon.xyz', 'img.catwvod.xyz', 'img.vim-cn.com', 's3-zen.mds.yandex.net'];
+
 task(require.main === module, __filename)(async (span) => {
   const files = await span.traceChildAsync('crawl thru all files', () => new Fdir()
     .withFullPaths()
@@ -48,6 +47,15 @@ task(require.main === module, __filename)(async (span) => {
   await Promise.all(files.map(file => span.traceChildAsync('dedupe ' + file, () => dedupeFile(file, whiteTrie))));
 });
 
+function trieHasEntry(trie: HostnameSmolTrie, line: string): boolean {
+  if (line[0] === '.') return trie.hasSubdomain(line.slice(1));
+  return trie.has(line) || trie.hasSubdomain(line);
+}
+
+function trieContains(trie: HostnameSmolTrie, line: string): boolean {
+  return trie.match(line);
+}
+
 async function dedupeFile(file: string, whitelist: HostnameSmolTrie) {
   const result: string[] = [];
 
@@ -55,8 +63,7 @@ async function dedupeFile(file: string, whitelist: HostnameSmolTrie) {
 
   let line: string | null = '';
 
-  // eslint-disable-next-line @typescript-eslint/unbound-method -- .call
-  let trieHasOrContains = HostnameSmolTrie.prototype.has;
+  let trieCheck = trieHasEntry;
 
   for await (const l of readFileByLine(file)) {
     line = processLine(l);
@@ -66,19 +73,18 @@ async function dedupeFile(file: string, whitelist: HostnameSmolTrie) {
         return;
       }
       if (l.startsWith('# $ dedupe_use_trie_contains')) {
-        // eslint-disable-next-line @typescript-eslint/unbound-method -- .call
-        trieHasOrContains = HostnameSmolTrie.prototype.contains;
+        trieCheck = trieContains;
       }
 
       result.push(l); // keep all comments and blank lines
       continue;
     }
 
-    if (trieHasOrContains.call(trie, line)) {
+    if (trieCheck(trie, line)) {
       continue; // drop duplicate
     }
 
-    if (whitelist.has(line)) {
+    if (trieHasEntry(whitelist, line)) {
       continue; // drop whitelisted items
     }
 
@@ -86,7 +92,7 @@ async function dedupeFile(file: string, whitelist: HostnameSmolTrie) {
     result.push(line);
   }
 
-  return fsp.writeFile(file, result.join('\n') + '\n');
+  return fsp.writeFile(file, fastStringArrayJoin(result, '\n') + '\n');
 }
 
 // function isDomainSuffix(whiteItem: string, incomingItem: string) {
