@@ -4,12 +4,14 @@ import { OUTPUT_SURGE_DIR } from './constants/dir';
 import path from 'node:path';
 import { readFileIntoProcessedArray } from './lib/fetch-text-by-line';
 import { xxhash3 } from 'hash-wasm';
+import { split1st } from 'foxts/split-nth';
 
 (async () => {
   const hashMap = new Map<string, Set<string>>();
 
   const runHash = async (inputs: string[]) => {
-    for (const input of inputs) {
+    for (let i = 0, len = inputs.length; i < len; i++) {
+      const input = inputs[i];
       const hash = await xxhash3(input);
       if (!hashMap.has(hash)) {
         hashMap.set(hash, new Set());
@@ -23,12 +25,13 @@ import { xxhash3 } from 'hash-wasm';
     .crawl(OUTPUT_SURGE_DIR)
     .withPromise();
 
-  for (const file of files) {
+  for (let i = 0, len = files.length; i < len; i++) {
+    const file = files[i];
     const fullpath = path.join(OUTPUT_SURGE_DIR, file);
     if (file.startsWith('domainset' + path.sep)) {
       await runHash((await readFileIntoProcessedArray(fullpath)).map(i => (i[0] === '.' ? i.slice(1) : i)));
     } else if (file.startsWith('non_ip' + path.sep)) {
-      await runHash((await readFileIntoProcessedArray(fullpath)).map(i => i.split(',')[1]));
+      await runHash((await readFileIntoProcessedArray(fullpath)).map(i => split1st(i, ',')));
     }
   }
 

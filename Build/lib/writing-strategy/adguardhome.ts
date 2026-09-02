@@ -13,7 +13,7 @@ export class AdGuardHome extends BaseWriteStrategy {
   protected result: string[] = [];
 
   // eslint-disable-next-line @typescript-eslint/class-methods-use-this -- abstract method
-  withPadding(title: string, description: string[] | readonly string[], date: Date, content: string[]): string[] {
+  withPadding(title: string, description: string[] | readonly string[], date: Date, content: string[], contentHash: string | null): string[] {
     return [
       `! Title: ${title}`,
       '! Last modified: ' + date.toUTCString(),
@@ -21,6 +21,7 @@ export class AdGuardHome extends BaseWriteStrategy {
       '! License: https://github.com/SukkaW/Surge/blob/master/LICENSE',
       '! Homepage: https://github.com/SukkaW/Surge',
       `! Description: ${description.join(' ')}`,
+      ...(contentHash ? [`! ${contentHash}`] : []),
       '!',
       ...content,
       '! EOF'
@@ -71,7 +72,8 @@ export class AdGuardHome extends BaseWriteStrategy {
       // So we can't do noResolve
       return;
     }
-    for (const ipcidr of ipGroup) {
+    for (let i = 0, len = ipGroup.length; i < len; i++) {
+      const ipcidr = ipGroup[i];
       if (ipcidr.endsWith('/32')) {
         this.result.push(`||${ipcidr.slice(0, -3)}`);
         /* else if (ipcidr.endsWith('.0/24')) {
@@ -89,7 +91,8 @@ export class AdGuardHome extends BaseWriteStrategy {
       // So we can't do noResolve
       return;
     }
-    for (const ipcidr of ipGroup) {
+    for (let i = 0, len = ipGroup.length; i < len; i++) {
+      const ipcidr = ipGroup[i];
       if (ipcidr.endsWith('/128')) {
         this.result.push(`||${ipcidr.slice(0, -4)}`);
       } else {

@@ -6,6 +6,7 @@ import { downloadPreviousBuild } from './download-previous-build';
 import { buildCommon } from './build-common';
 import { buildRejectIPList } from './build-reject-ip-list';
 import { buildAppleCdn } from './build-apple-cdn';
+import { buildAICIDR } from './build-ai-cidr';
 import { buildRejectDomainSet } from './build-reject-domainset';
 import { buildChnCidr } from './build-chn-cidr';
 import { buildSpeedtestDomainSet } from './build-speedtest-domainset';
@@ -27,6 +28,9 @@ import { buildDeprecateFiles } from './build-deprecate-files';
 import path from 'node:path';
 import { ROOT_DIR } from './constants/dir';
 import { isCI } from 'ci-info';
+import { printExternalDownloadStats } from './lib/download-stats';
+import { endOutputWorkerFarm, warmOutputWorkerFarm } from './lib/rules/output-worker-farm';
+import { appendArrayInPlace } from 'foxts/append-array-in-place';
 
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
@@ -75,13 +79,18 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
     require.resolve('./build-cdn-download-conf.worker')
   )(['buildCdnDownloadConf']);
 
-  const telegramCidrWorker = createWorker<typeof import('./build-telegram-cidr.worker')>(
-    require.resolve('./build-telegram-cidr.worker')
-  )(['buildTelegramCIDR']);
+  const telegramWorker = createWorker<typeof import('./build-telegram.worker')>(
+    require.resolve('./build-telegram.worker')
+  )(['buildTelegram']);
 
   const mockAssetsWorker = createWorker<typeof import('./download-mock-assets.worker')>(
     require.resolve('./download-mock-assets.worker')
   )(['downloadMockAssets']);
+
+  // Shared by any task whose FileOutput crosses the offload threshold. Booted here
+  // rather than inside a task so the ~250ms thread spin-up overlaps the downloads
+  // instead of landing on the critical path when the writes finally dispatch.
+  warmOutputWorkerFarm();
 
   try {
     // only enable why-is-node-running in GitHub Actions debug mode
@@ -91,34 +100,36 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
 
     const downloadPreviousBuildPromise = downloadPreviousBuild();
 
-    const traces: TraceResult[] = await Promise.all([
-      downloadPreviousBuildPromise,
-      downloadPreviousBuildPromise.then(() => buildCommon()),
-      downloadPreviousBuildPromise.then(() => buildRejectIPList()),
-      downloadPreviousBuildPromise.then(() => buildAppleCdn()),
-      downloadPreviousBuildPromise.then(() => cdnDownloadWorker.buildCdnDownloadConf()),
-      downloadPreviousBuildPromise.then(() => buildRejectDomainSet()),
-      downloadPreviousBuildPromise.then(() => telegramCidrWorker.buildTelegramCIDR()),
-      downloadPreviousBuildPromise.then(() => buildChnCidr()),
-      downloadPreviousBuildPromise.then(() => buildSpeedtestDomainSet()),
-      downloadPreviousBuildPromise.then(() => buildDomesticRuleset()),
-      downloadPreviousBuildPromise.then(() => buildGlobalRuleset()),
-      downloadPreviousBuildPromise.then(() => buildRedirectModule()),
-      downloadPreviousBuildPromise.then(() => buildAlwaysRealIPModule()),
-      downloadPreviousBuildPromise.then(() => buildStreamService()),
-      downloadPreviousBuildPromise.then(() => microsoftCdnWorker.buildMicrosoftCdn()),
-      downloadPreviousBuildPromise.then(() => buildCloudMounterRules()),
-      mockAssetsWorker.downloadMockAssets()
+    const [traces, telegramTraces]: [TraceResult[], TraceResult[]] = await Promise.all([
+      Promise.all([
+        downloadPreviousBuildPromise,
+        downloadPreviousBuildPromise.then(() => buildCommon()),
+        downloadPreviousBuildPromise.then(() => buildRejectIPList()),
+        downloadPreviousBuildPromise.then(() => buildAppleCdn()),
+        downloadPreviousBuildPromise.then(() => buildAICIDR()),
+        downloadPreviousBuildPromise.then(() => cdnDownloadWorker.buildCdnDownloadConf()),
+        downloadPreviousBuildPromise.then(() => buildRejectDomainSet()),
+        downloadPreviousBuildPromise.then(() => buildChnCidr()),
+        downloadPreviousBuildPromise.then(() => buildSpeedtestDomainSet()),
+        downloadPreviousBuildPromise.then(() => buildDomesticRuleset()),
+        downloadPreviousBuildPromise.then(() => buildGlobalRuleset()),
+        downloadPreviousBuildPromise.then(() => buildRedirectModule()),
+        downloadPreviousBuildPromise.then(() => buildAlwaysRealIPModule()),
+        downloadPreviousBuildPromise.then(() => buildStreamService()),
+        downloadPreviousBuildPromise.then(() => microsoftCdnWorker.buildMicrosoftCdn()),
+        downloadPreviousBuildPromise.then(() => buildCloudMounterRules()),
+        mockAssetsWorker.downloadMockAssets()
+      ]),
+      downloadPreviousBuildPromise.then(() => telegramWorker.buildTelegram())
     ]);
 
-    traces.push(
-      await buildDeprecateFiles(),
-      await buildPublic()
-    );
+    appendArrayInPlace(traces, telegramTraces);
+    traces.push(await buildDeprecateFiles(), await buildPublic());
 
     // write a file to demonstrate that the build is finished
     fs.writeFileSync(buildFinishedLock, 'BUILD_FINISHED\n');
 
+    printExternalDownloadStats();
     traces.forEach((t) => {
       printTraceResult(t);
     });
@@ -127,8 +138,9 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
     await Promise.all([
       microsoftCdnWorker.end(),
       cdnDownloadWorker.end(),
-      telegramCidrWorker.end(),
-      mockAssetsWorker.end()
+      telegramWorker.end(),
+      mockAssetsWorker.end(),
+      endOutputWorkerFarm()
     ]);
 
     // Finish the build to avoid leaking timer/fetch ref

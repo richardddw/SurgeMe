@@ -1,6 +1,7 @@
 import { processLine } from './lib/process-line';
 import { fastNormalizeDomain } from './lib/normalize-domain';
-import { HostnameSmolTrie } from './lib/trie';
+import { HostnameSmolTrie } from 'hntrie/smol';
+import { domainToASCII } from 'node:url';
 import yauzl from 'yauzl-promise';
 import { fetchRemoteTextByLine } from './lib/fetch-text-by-line';
 import path from 'node:path';
@@ -69,7 +70,9 @@ export async function parseGfwList() {
   ]);
 
   const text = await (await $$fetch('https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt')).text();
-  for (const l of atob(text).split('\n')) {
+  const lines = atob(text).split('\n');
+  for (let i = 0, len = lines.length; i < len; i++) {
+    const l = lines[i];
     const line = processLine(l);
     if (!line) continue;
 
@@ -92,11 +95,11 @@ export async function parseGfwList() {
       gfwListTrie.add('.' + line.slice(2));
       continue;
     }
-    if (line.startsWith('|')) {
+    if (line[0] === '|') {
       gfwListTrie.add(line.slice(1));
       continue;
     }
-    if (line.startsWith('.')) {
+    if (line[0] === '.') {
       gfwListTrie.add(line);
       continue;
     }
@@ -104,7 +107,6 @@ export async function parseGfwList() {
     if (d) {
       totalGfwSize++;
       gfwListTrie.add(d);
-      continue;
     }
   }
   for await (const l of await fetchRemoteTextByLine('https://raw.githubusercontent.com/Loyalsoldier/cn-blocked-domain/release/domains.txt', true)) {
@@ -121,8 +123,9 @@ export async function parseGfwList() {
   const keywordSet = new Set<string>();
 
   const callback = (domain: string, includeAllSubdomain: boolean) => {
-    gfwListTrie.whitelist(domain, includeAllSubdomain);
-    topDomainTrie.whitelist(domain, includeAllSubdomain);
+    const d = includeAllSubdomain ? '.' + domain : domain;
+    gfwListTrie.whitelist(d);
+    topDomainTrie.whitelist(d);
   };
   await Promise.all([
     runAgainstSourceFile(path.join(SOURCE_DIR, 'non_ip/global.conf'), callback, 'ruleset', keywordSet),
@@ -150,17 +153,18 @@ export async function parseGfwList() {
     });
   });
 
-  whiteSet.forEach(domain => gfwListTrie.whitelist(domain, true));
+  whiteSet.forEach(domain => gfwListTrie.whitelist(domain[0] === '.' ? domain : '.' + domain));
 
   let dedupedGfwListSize = 0;
-  gfwListTrie.dump(() => dedupedGfwListSize++);
+  gfwListTrie.dump(() => { dedupedGfwListSize++; });
 
   const kwfilter = createKeywordFilter([...keywordSet]);
 
   const missingTop10000Gfwed = new Set<string>();
 
-  topDomainTrie.dump((domain) => {
-    if (gfwListTrie.has(domain) && !kwfilter(domain)) {
+  topDomainTrie.dump((rawDomain) => {
+    const domain = domainToASCII(rawDomain);
+    if (domain && gfwListTrie.match(domain) && !kwfilter(domain)) {
       missingTop10000Gfwed.add(domain);
     }
   });

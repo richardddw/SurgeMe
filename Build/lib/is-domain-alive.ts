@@ -1,5 +1,5 @@
 import { createDomainAliveChecker, createRegisterableDomainAliveChecker } from 'domain-alive';
-import { $$fetch, fetchForDoH } from './fetch-retry';
+import { $$fetch, fetchAgent, fetchForDoH } from './fetch-retry';
 
 const dnsServers = [
   'https://8.8.8.8/dns-query', 'https://8.8.4.4/dns-query',
@@ -19,7 +19,7 @@ const dnsServers = [
   // 'https://doh.sb/dns-query', // DNS.SB xTom Anycast IP
   // 'https://dns.sb/dns-query', // DNS.SB use same xTom Anycast IP as doh.sb
   // 'https://dns10.quad9.net/dns-query', // Quad9 unfiltered
-  'https://9.9.9.10/dns-query', 'https://149.112.112.10/dns-query', // Quad9 unfiltered
+  // 'https://9.9.9.10/dns-query', 'https://149.112.112.10/dns-query', // Quad9 unfiltered Error: Cannot decode name (bad label)
 
   // OpenDNS sandbox (unfiltered), doesn't support HTTP/2 properly
   // Error: Session closed without receiving a SETTINGS frame
@@ -43,7 +43,7 @@ const dnsServers = [
   // 'https://dns.mullvad.net/dns-query', empty HTTP body a lot
   'https://basic.rethinkdns.com/dns-query',
   'https://dns.surfsharkdns.com/dns-query',
-  'https://private.canadianshield.cira.ca/dns-query',
+  // 'https://private.canadianshield.cira.ca/dns-query', // Error: Cannot decode name (bad label)
   // 'https://unfiltered.joindns4.eu/dns-query', // too many ECONNRESET on GitHub Actions
   'https://public.dns.iij.jp/dns-query',
   // 'https://common.dot.dns.yandex.net/dns-query', // too many ECONNRESET on GitHub Actions
@@ -55,14 +55,13 @@ const dnsServers = [
 const resultCache = new Map();
 const registerableDomainResultCache = new Map();
 
-export async function getMethods() {
-  const customWhoisServersMapping = await (await ($$fetch('https://cdn.jsdelivr.net/npm/whois-servers-list@latest/list.json'))).json() as any;
-
+export function createDomainAliveMethods(customWhoisServersMapping: Record<string, string>) {
   const isRegisterableDomainAlive = createRegisterableDomainAliveChecker({
     dns: {
       dnsServers,
       maxAttempts: 6,
-      customFetchForDoH: fetchForDoH as typeof fetch
+      customFetchForDoH: fetchForDoH as typeof fetch,
+      customAgentForDoH: fetchAgent
     },
     registerableDomainResultCache,
     whois: {
@@ -74,7 +73,8 @@ export async function getMethods() {
     dns: {
       dnsServers,
       maxAttempts: 6,
-      customFetchForDoH: fetchForDoH as typeof fetch
+      customFetchForDoH: fetchForDoH as typeof fetch,
+      customAgentForDoH: fetchAgent
     },
     registerableDomainResultCache,
     resultCache,
@@ -84,4 +84,10 @@ export async function getMethods() {
   });
 
   return { isRegisterableDomainAlive, isDomainAlive };
+}
+
+export async function getMethods() {
+  const customWhoisServersMapping = await (await ($$fetch('https://cdn.jsdelivr.net/gh/WooMai/whois-servers@master/list.json'))).json() as Record<string, string>;
+
+  return createDomainAliveMethods(customWhoisServersMapping);
 };
