@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "rules": [
+    {
+      "domain": [
+        "7h15.ru1353t.1s.m4d3.by.5ukk4w.skk.moe",
+        "javdb.com",
+        "mhgui.com",
+        "avbebe.com",
+        "hanime1.me",
+        "yymanhua.com",
+        "av.jkforum.net",
+        "www.yymanhua.com",
+        "www.manhuagui.com"
+      ],
+      "domain_suffix": ["7h15.ru1353t.1s.m4d3.by.5ukk4w.skk.moe", "cdn.hinet.net"]
+    }
+  ]
+}
