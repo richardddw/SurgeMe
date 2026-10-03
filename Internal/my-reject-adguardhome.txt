@@ -1,0 +1,56 @@
+! Title: Sukka's Ruleset - AdGuardHome Blocklist for Myself (Sukka)
+! Last modified: Sun, 30 Aug 2026 07:32:00 GMT
+! Expires: 6 hours
+! License: https://github.com/SukkaW/Surge/blob/master/LICENSE
+! Homepage: https://github.com/SukkaW/Surge
+! Description: 
+! $content-hash-v1$:m3Uc4EUFhEZ8Lqulyycc-OQxvm57MWwzkS-P1UdqRnQ$
+!
+||pipi.cn^
+||ule.com^
+||adobe.io^
+||jr.mi.com^
+||cool3c.com^
+||ulecdn.com^
+|ad.12306.cn^
+||tongdun.net^
+||look.163.com^
+||adobestats.io^
+||lmk.mipay.com^
+||mall.10010.cn^
+|push.12306.cn^
+||api.miwifi.com^
+|epay.10010.com^
+||httpizza.ele.me^
+||mibi.xiaomi.com^
+||microfin.ele.me^
+|daisydiskapp.com^
+||game.meituan.com^
+||xiaomimobile.com^
+||easytomessage.com^
+||hybrid.xiaomi.com^
+||logan.sankuai.com^
+||mtvod.meituan.net^
+||unicompayment.com^
+||video.goofish.com^
+||0.0.198.in-addr.arpa^
+||contents.meituan.com^
+|fyb-2.cdn.bcebos.com^
+||genuine.autodesk.com^
+|mpush-api.aliyun.com^
+||jr.airstarfinance.net^
+||mtvod-ali.meituan.net^
+||newbuy.chinaunicom.cn^
+|app-download.fliggy.com^
+||expenses-fe.meituan.com^
+|userlocation.googleapis.com^
+|loan-supermarket.faas.ele.me^
+|locationhistory-pa.googleapis.com^
+||video-zb.cloudvideocdn.taobao.com^
+|locationhistoryaggregates-pa.googleapis.com^
+|locationhistoryplacedetails-pa.googleapis.com^
+/bahoom/
+/-flv\.meituan\.net/
+/-live\.meituan\.net/
+/-fin\.meituan\.com/
+! EOF
