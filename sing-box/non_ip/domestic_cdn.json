@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "rules": [
+    {
+      "domain": ["7h15.ru1353t.1s.m4d3.by.5ukk4w.skk.moe", "time.xtracloud.net", "registry.npmmirror.com"],
+      "domain_suffix": [
+        "7h15.ru1353t.1s.m4d3.by.5ukk4w.skk.moe",
+        "tbcdn.cn",
+        "hdslb.com",
+        "qhimg.com",
+        "qhres.com",
+        "zhimg.com",
+        "alicdn.com",
+        "qhimgs.com",
+        "qhres2.com",
+        "sinaimg.cn",
+        "biliimg.com",
+        "sinaimg.com",
+        "360buyimg.com",
+        "music.126.net",
+        "alipayobjects.com",
+        "tx-safety-video.acfun.cn",
+        "ali-safety-video.acfun.cn"
+      ]
+    }
+  ]
+}
