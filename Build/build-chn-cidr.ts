@@ -1,16 +1,16 @@
-import { fetchRemoteTextByLine } from './lib/fetch-text-by-line';
-import { task } from './trace';
+import { fetchRemoteTextLines } from './lib/fetch-text-by-line';
+import { SpanCategory, task } from './trace';
 
 import { IPListOutput } from './lib/rules/ip';
 import { createFileDescription } from './constants/description';
 
 const getChnCidrPromise = Promise.all([
-  fetchRemoteTextByLine('https://chnroutes2.cdn.skk.moe/chnroutes.txt', true).then(Array.fromAsync<string>),
-  fetchRemoteTextByLine('https://gaoyifan.github.io/china-operator-ip/china6.txt', true).then(Array.fromAsync<string>)
+  fetchRemoteTextLines('https://chnroutes2.cdn.skk.moe/chnroutes.txt', true),
+  fetchRemoteTextLines('https://gaoyifan.github.io/china-operator-ip/china6.txt', true)
 ]);
 
 export const buildChnCidr = task(require.main === module, __filename)(async (span) => {
-  const [filteredCidr4, cidr6] = await span.traceChildPromise('download chnroutes2', getChnCidrPromise);
+  const [filteredCidr4, cidr6] = await span.traceChildPromise('download chnroutes2', getChnCidrPromise, SpanCategory.Network);
 
   // Can not use SHARED_DESCRIPTION here as different license
   const description = createFileDescription('CC BY-SA 2.0');

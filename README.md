@@ -797,22 +797,29 @@ rules:
   - RULE-SET,lan_ip,DIRECT
 ```
 
-#### Misc
+#### 中国大陆常见服务
 
 - 人工维护
 
 **Surge**
 
 ```ini
+# 中国大陆境内（最常见的使用场景）：仅需配置 domestic，直连即可
 # Non IP
-RULE-SET,https://ruleset.skk.moe/List/non_ip/domestic.conf,[Replace with your policy]
-RULE-SET,https://ruleset.skk.moe/List/non_ip/direct.conf,[Replace with your policy]
-RULE-SET,https://ruleset.skk.moe/List/non_ip/global.conf,[Replace with your policy]
+RULE-SET,https://ruleset.skk.moe/List/non_ip/domestic.conf,DIRECT
+
+# IP
+RULE-SET,https://ruleset.skk.moe/List/ip/domestic.conf,DIRECT
 ```
 
 ```ini
+# 其他国家和地区、需要通过回国节点访问中国大陆服务：domestic_cdn 优先直连，domestic 使用回国节点
+# Non IP
+RULE-SET,https://ruleset.skk.moe/List/non_ip/domestic_cdn.conf,DIRECT
+RULE-SET,https://ruleset.skk.moe/List/non_ip/domestic.conf,Back To China Proxy
+
 # IP
-RULE-SET,https://ruleset.skk.moe/List/ip/domestic.conf,[Replace with your policy]
+RULE-SET,https://ruleset.skk.moe/List/ip/domestic.conf,Back To China Proxy
 ```
 
 **Mihomo**
@@ -826,20 +833,14 @@ rule-providers:
     interval: 43200
     url: https://ruleset.skk.moe/Clash/non_ip/domestic.txt
     path: ./sukkaw_ruleset/domestic_non_ip.txt
-  direct_non_ip:
+  # 仅在其他国家和地区、需要通过回国节点访问中国大陆服务时才需要引入
+  domestic_cdn_non_ip:
     type: http
     behavior: classical
     format: text
     interval: 43200
-    url: https://ruleset.skk.moe/Clash/non_ip/direct.txt
-    path: ./sukkaw_ruleset/direct_non_ip.txt
-  global_non_ip:
-    type: http
-    behavior: classical
-    format: text
-    interval: 43200
-    url: https://ruleset.skk.moe/Clash/non_ip/global.txt
-    path: ./sukkaw_ruleset/global_non_ip.txt
+    url: https://ruleset.skk.moe/Clash/non_ip/domestic_cdn.txt
+    path: ./sukkaw_ruleset/domestic_cdn_non_ip.txt
   domestic_ip:
     type: http
     behavior: classical
@@ -850,17 +851,102 @@ rule-providers:
 ```
 
 ```yaml
-# Non IP
+# 中国大陆境内（最常见的使用场景）：仅需配置 domestic，直连即可
 rules:
-  - RULE-SET,domestic_non_ip,[Replace with your policy]
-  - RULE-SET,direct_non_ip,[Replace with your policy]
-  - RULE-SET,global_non_ip,[Replace with your policy]
+  # Non IP
+  - RULE-SET,domestic_non_ip,DIRECT
+  # IP
+  - RULE-SET,domestic_ip,DIRECT
 ```
 
 ```yaml
-# IP
+# 其他国家和地区、需要通过回国节点访问中国大陆服务：domestic_cdn 优先直连，domestic 使用回国节点
 rules:
-  - RULE-SET,domestic_ip,[Replace with your policy]
+  # Non IP
+  - RULE-SET,domestic_cdn_non_ip,DIRECT
+  - RULE-SET,domestic_non_ip,Back To China Proxy
+  # IP
+  - RULE-SET,domestic_ip,Back To China Proxy
+```
+
+#### 需直连的服务
+
+- 人工维护
+- 包含热点认证页面、PT 站点、下载工具和代理工具的进程名、局域网缓存服务、学术数据库等无论身处何处都应当直连的服务
+- 直连即可
+
+**Surge**
+
+```ini
+# Non IP
+RULE-SET,https://ruleset.skk.moe/List/non_ip/direct.conf,DIRECT
+```
+
+**Mihomo**
+
+```yaml
+rule-providers:
+  direct_non_ip:
+    type: http
+    behavior: classical
+    format: text
+    interval: 43200
+    url: https://ruleset.skk.moe/Clash/non_ip/direct.txt
+    path: ./sukkaw_ruleset/direct_non_ip.txt
+```
+
+```yaml
+# Non IP
+rules:
+  - RULE-SET,direct_non_ip,DIRECT
+```
+
+#### 其他国家和地区常见服务
+
+- 人工维护
+- 包含 Google、Reddit、Facebook、Twitter、Discord、GitHub 等在中国大陆境内无法直接访问、或直接访问体验不佳的其他国家和地区常见服务，以及一批其他国家和地区的 ccTLD 和 gTLD
+- **绝大多数用户位于中国大陆境内，这部分规则使用代理即可**
+- 仅当你身处其他国家和地区、只需要通过回国节点访问中国大陆服务、其余流量全部直连时，才需要将这部分规则直连（此时你的 `FINAL` / `MATCH` 通常也是直连）
+
+**Surge**
+
+```ini
+# 中国大陆境内（最常见的使用场景）：使用代理
+# Non IP
+RULE-SET,https://ruleset.skk.moe/List/non_ip/global.conf,Proxy
+```
+
+```ini
+# 其他国家和地区、仅需通过回国节点访问中国大陆服务：直连即可
+# Non IP
+RULE-SET,https://ruleset.skk.moe/List/non_ip/global.conf,DIRECT
+```
+
+**Mihomo**
+
+```yaml
+rule-providers:
+  global_non_ip:
+    type: http
+    behavior: classical
+    format: text
+    interval: 43200
+    url: https://ruleset.skk.moe/Clash/non_ip/global.txt
+    path: ./sukkaw_ruleset/global_non_ip.txt
+```
+
+```yaml
+# 中国大陆境内（最常见的使用场景）：使用代理
+# Non IP
+rules:
+  - RULE-SET,global_non_ip,Proxy
+```
+
+```yaml
+# 其他国家和地区、仅需通过回国节点访问中国大陆服务：直连即可
+# Non IP
+rules:
+  - RULE-SET,global_non_ip,DIRECT
 ```
 
 #### chnroute CIDR

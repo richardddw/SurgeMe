@@ -17,19 +17,22 @@ import { buildStreamService } from './build-stream-service';
 import { buildRedirectModule } from './build-sgmodule-redirect';
 import { buildAlwaysRealIPModule } from './build-sgmodule-always-realip';
 
-import { createWorker } from './lib/worker';
+import { buildTelegram } from './build-telegram';
+import { downloadMockAssets } from './download-mock-assets';
 
 import { buildPublic } from './build-public';
 import { buildCloudMounterRules } from './build-cloudmounter-rules';
 
-import { printStats, printTraceResult, whyIsNodeRunning } from './trace';
+import { printBuildReport, whyIsNodeRunning } from './trace';
 import type { TraceResult } from './trace';
+import { performance } from 'node:perf_hooks';
 import { buildDeprecateFiles } from './build-deprecate-files';
 import path from 'node:path';
 import { ROOT_DIR } from './constants/dir';
 import { isCI } from 'ci-info';
 import { printExternalDownloadStats } from './lib/download-stats';
-import { endOutputWorkerFarm, warmOutputWorkerFarm } from './lib/rules/output-worker-farm';
+import { printWireStats } from './lib/download-wire-stats';
+import { endBuildWorkerFarm, getBuildWorkerFarm, warmBuildWorkerFarm } from './lib/build-worker-farm';
 import { appendArrayInPlace } from 'foxts/append-array-in-place';
 
 process.on('uncaughtException', (error) => {
@@ -71,26 +74,19 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
     fs.unlinkSync(buildFinishedLock);
   }
 
-  const microsoftCdnWorker = createWorker<typeof import('./build-microsoft-cdn.worker')>(
-    require.resolve('./build-microsoft-cdn.worker')
-  )(['buildMicrosoftCdn']);
+  // Build-wide resource baselines: how busy the main thread's event loop was
+  // (CPU vs. waiting on I/O) and how much CPU the whole process (incl. worker
+  // threads) burned relative to wall-clock.
+  const eluAtStart = performance.eventLoopUtilization();
+  const cpuAtStart = process.cpuUsage();
 
-  const cdnDownloadWorker = createWorker<typeof import('./build-cdn-download-conf.worker')>(
-    require.resolve('./build-cdn-download-conf.worker')
-  )(['buildCdnDownloadConf']);
-
-  const telegramWorker = createWorker<typeof import('./build-telegram.worker')>(
-    require.resolve('./build-telegram.worker')
-  )(['buildTelegram']);
-
-  const mockAssetsWorker = createWorker<typeof import('./download-mock-assets.worker')>(
-    require.resolve('./download-mock-assets.worker')
-  )(['downloadMockAssets']);
-
-  // Shared by any task whose FileOutput crosses the offload threshold. Booted here
-  // rather than inside a task so the ~250ms thread spin-up overlaps the downloads
-  // instead of landing on the critical path when the writes finally dispatch.
-  warmOutputWorkerFarm();
+  // The one thread farm every off-main-thread job goes through: the reject
+  // sources / phishing parse, the two trie-heavy CDN tasks, and any FileOutput
+  // that crosses the offload threshold. Booted here rather than on first use so
+  // the ~250ms-per-thread spin-up overlaps the first downloads instead of landing
+  // on the critical path. Everything else is I/O-bound and stays on this thread.
+  warmBuildWorkerFarm();
+  const farm = getBuildWorkerFarm();
 
   try {
     // only enable why-is-node-running in GitHub Actions debug mode
@@ -107,7 +103,7 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
         downloadPreviousBuildPromise.then(() => buildRejectIPList()),
         downloadPreviousBuildPromise.then(() => buildAppleCdn()),
         downloadPreviousBuildPromise.then(() => buildAICIDR()),
-        downloadPreviousBuildPromise.then(() => cdnDownloadWorker.buildCdnDownloadConf()),
+        downloadPreviousBuildPromise.then(() => farm.buildCdnDownloadConf()),
         downloadPreviousBuildPromise.then(() => buildRejectDomainSet()),
         downloadPreviousBuildPromise.then(() => buildChnCidr()),
         downloadPreviousBuildPromise.then(() => buildSpeedtestDomainSet()),
@@ -116,11 +112,11 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
         downloadPreviousBuildPromise.then(() => buildRedirectModule()),
         downloadPreviousBuildPromise.then(() => buildAlwaysRealIPModule()),
         downloadPreviousBuildPromise.then(() => buildStreamService()),
-        downloadPreviousBuildPromise.then(() => microsoftCdnWorker.buildMicrosoftCdn()),
+        downloadPreviousBuildPromise.then(() => farm.buildMicrosoftCdn()),
         downloadPreviousBuildPromise.then(() => buildCloudMounterRules()),
-        mockAssetsWorker.downloadMockAssets()
+        downloadMockAssets()
       ]),
-      downloadPreviousBuildPromise.then(() => telegramWorker.buildTelegram())
+      downloadPreviousBuildPromise.then(() => buildTelegram())
     ]);
 
     appendArrayInPlace(traces, telegramTraces);
@@ -130,18 +126,13 @@ const buildFinishedLock = path.join(ROOT_DIR, '.BUILD_FINISHED');
     fs.writeFileSync(buildFinishedLock, 'BUILD_FINISHED\n');
 
     printExternalDownloadStats();
-    traces.forEach((t) => {
-      printTraceResult(t);
+    printWireStats();
+    printBuildReport(traces, {
+      elu: performance.eventLoopUtilization(eluAtStart),
+      cpu: process.cpuUsage(cpuAtStart)
     });
-    printStats(traces);
 
-    await Promise.all([
-      microsoftCdnWorker.end(),
-      cdnDownloadWorker.end(),
-      telegramWorker.end(),
-      mockAssetsWorker.end(),
-      endOutputWorkerFarm()
-    ]);
+    await endBuildWorkerFarm();
 
     // Finish the build to avoid leaking timer/fetch ref
     await whyIsNodeRunning();

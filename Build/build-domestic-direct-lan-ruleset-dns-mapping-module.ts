@@ -1,11 +1,12 @@
 // @ts-check
 import path from 'node:path';
 import { DOMESTICS, DOH_BOOTSTRAP, AdGuardHomeDNSMapping } from '../Source/non_ip/domestic';
+import { DOMESTIC_CDN } from '../Source/non_ip/domestic_cdn';
 import { DIRECTS, HOSTS, LAN } from '../Source/non_ip/direct';
 import type { DNSMapping } from '../Source/non_ip/direct';
-import { fetchRemoteTextByLine, readFileIntoProcessedArray } from './lib/fetch-text-by-line';
+import { fetchRemoteTextLines, readFileIntoProcessedArray } from './lib/fetch-text-by-line';
 import { compareAndWriteFile } from './lib/create-file';
-import { task } from './trace';
+import { SpanCategory, task } from './trace';
 import type { Span } from './trace';
 import { SHARED_DESCRIPTION } from './constants/description';
 import { once } from 'foxts/once';
@@ -53,6 +54,17 @@ export function createGetDnsMappingRule(allowWildcard: boolean) {
   };
 }
 
+export const getDomesticCdnDomainsRulesetPromise = once(async () => {
+  const domesticCdn = await readFileIntoProcessedArray(path.join(SOURCE_DIR, 'non_ip/domestic_cdn.conf'));
+  const getDnsMappingRuleWithWildcard = createGetDnsMappingRule(true);
+
+  Object.values(DOMESTIC_CDN).forEach(({ domains }) => {
+    appendArrayInPlace(domesticCdn, domains.flatMap(getDnsMappingRuleWithWildcard));
+  });
+
+  return domesticCdn;
+});
+
 export const getDomesticAndDirectDomainsRulesetPromise = once(async () => {
   const domestics = await readFileIntoProcessedArray(path.join(SOURCE_DIR, 'non_ip/domestic.conf'));
   const directs = await readFileIntoProcessedArray(path.resolve(SOURCE_DIR, 'non_ip/direct.conf'));
@@ -65,6 +77,9 @@ export const getDomesticAndDirectDomainsRulesetPromise = once(async () => {
       appendArrayInPlace(domestics, domains.flatMap(getDnsMappingRuleWithWildcard));
     });
   });
+
+  // Keep legacy subscriptions inclusive of the CDN exceptions.
+  appendArrayInPlace(domestics, await getDomesticCdnDomainsRulesetPromise());
 
   Object.values(DIRECTS).forEach(({ domains }) => {
     appendArrayInPlace(directs, domains.flatMap(getDnsMappingRuleWithWildcard));
@@ -81,8 +96,16 @@ export const getDomesticAndDirectDomainsRulesetPromise = once(async () => {
 
 export const buildDomesticRuleset = task(require.main === module, __filename)(async (span) => {
   const [domestics, directs, lans] = await getDomesticAndDirectDomainsRulesetPromise();
+  const domesticCdn = await getDomesticCdnDomainsRulesetPromise();
 
-  const dataset: Array<[name: string, DNSMapping]> = ([DOH_BOOTSTRAP, DOMESTICS, DIRECTS, LAN, HOSTS] as const).flatMap(Object.entries);
+  // Preserve existing provider IDs, and namespace CDN providers so the same
+  // provider can appear in both sources without overwriting its ruleset or DNS policy.
+  const domesticMappings = Object.entries(DOMESTIC_CDN).reduce<Record<string, DNSMapping>>((mappings, [name, mapping]) => {
+    mappings[`DOMESTIC_CDN_${name}`] = mapping;
+    return mappings;
+  }, { ...DOMESTICS });
+
+  const dataset: Array<[name: string, mapping: DNSMapping]> = ([DOH_BOOTSTRAP, domesticMappings, DIRECTS, LAN, HOSTS] as const).flatMap(Object.entries);
 
   return Promise.all([
     new RulesetOutput(span, 'domestic', 'non_ip')
@@ -93,6 +116,16 @@ export const buildDomesticRuleset = task(require.main === module, __filename)(as
         'This file contains known addresses that are avaliable in the Mainland China.'
       )
       .addFromRuleset(domestics)
+      .write(),
+    new RulesetOutput(span, 'domestic_cdn', 'non_ip')
+      .withTitle('Sukka\'s Ruleset - Domestic CDN Domains')
+      .appendDescription(
+        SHARED_DESCRIPTION,
+        '',
+        'This file contains CDN domains of domestic services that have somewhat optimal performance both in China and abroad.',
+        'All entries are included in the domestic ruleset as well.'
+      )
+      .addFromRuleset(domesticCdn)
       .write(),
     new RulesetOutput(span, 'direct', 'non_ip')
       .withTitle('Sukka\'s Ruleset - Direct Rules')
@@ -328,7 +361,7 @@ export const buildDomesticRuleset = task(require.main === module, __filename)(as
         'https://doh.pub/dns-query',
         'https://dns.alidns.com/dns-query',
         '[//]udp://10.10.1.1:53',
-        ...(([DOMESTICS, DIRECTS, LAN, HOSTS] as const).flatMap(Object.values) as DNSMapping[]).flatMap(({ domains, dns: _dns }) => domains.flatMap((domain) => {
+        ...(([domesticMappings, DIRECTS, LAN, HOSTS] as const).flatMap(Object.values) as DNSMapping[]).flatMap(({ domains, dns: _dns }) => domains.flatMap((domain) => {
           if (!_dns) {
             return [];
           }
@@ -372,7 +405,7 @@ export const buildDomesticRuleset = task(require.main === module, __filename)(as
 async function buildLANCacheRuleset(span: Span) {
   const childSpan = span.traceChild('build LAN cache ruleset');
 
-  const cacheDomainsData = await childSpan.traceChildAsync('fetch cache_domains.json', async () => (await $$fetch('https://cdn.jsdelivr.net/gh/uklans/cache-domains@master/cache_domains.json')).json());
+  const cacheDomainsData = await childSpan.traceChildAsync('fetch cache_domains.json', async () => (await $$fetch('https://cdn.jsdelivr.net/gh/uklans/cache-domains@master/cache_domains.json')).json(), SpanCategory.Network);
   if (!cacheDomainsData || typeof cacheDomainsData !== 'object' || !('cache_domains' in cacheDomainsData) || !Array.isArray(cacheDomainsData.cache_domains)) {
     throw new TypeError('Invalid cache domains data');
   }
@@ -386,9 +419,10 @@ async function buildLANCacheRuleset(span: Span) {
   const allDomains = (
     await Promise.all(
       allDomainFiles.map(
-        async (file) => childSpan.traceChildAsync(
+        (file) => childSpan.traceChildAsync(
           'download ' + file,
-          async () => Array.fromAsync(await fetchRemoteTextByLine('https://cdn.jsdelivr.net/gh/uklans/cache-domains@master/' + file, true))
+          () => fetchRemoteTextLines('https://cdn.jsdelivr.net/gh/uklans/cache-domains@master/' + file, true),
+          SpanCategory.Network
         )
       )
     )
@@ -443,6 +477,8 @@ async function buildLANCacheRuleset(span: Span) {
     surgeOutput.addDomain(domain);
     mihomoOutput.addDomain(domain);
   }
+
+  childSpan.stop();
 
   return Promise.all([
     surgeOutput.write(),
