@@ -1,3 +1,4 @@
+import { SpanCategory } from '../../trace';
 import type { Span } from '../../trace';
 import { HostnameSmolTrie } from 'hntrie/smol';
 import { not, nullthrow } from 'foxts/guard';
@@ -10,7 +11,7 @@ import { appendArrayInPlace } from 'foxts/append-array-in-place';
 import { isMainThread } from 'node:worker_threads';
 import { resolveStrategyOutputPath, serializeStrategy, writeDataToStrategies } from './strategy-write-data';
 import type { OutputWorkerPayload, StrategyWriteData } from './strategy-write-data';
-import { getOutputWorkerFarm } from './output-worker-farm';
+import { getBuildWorkerFarm } from '../build-worker-farm';
 
 /**
  * Below this many dumped domain entries, formatting + hashing + writing inline is
@@ -68,10 +69,15 @@ export class FileOutput {
     return this;
   };
 
-  protected readonly span: Span;
+  /**
+   * The `RuleOutput#id` span is only opened by write(): between construction and
+   * write() this object merely accumulates sources, and that time already belongs
+   * to the sibling spans doing the downloading / reading.
+   */
+  protected readonly parentSpan: Span;
 
   constructor($span: Span, protected readonly id: string) {
-    this.span = $span.traceChild('RuleOutput#' + id);
+    this.parentSpan = $span;
   }
 
   protected title: string | null = null;
@@ -183,19 +189,32 @@ export class FileOutput {
     return this;
   }
 
+  private addDomainsetLine(line: string) {
+    const otherPoundSign = line.lastIndexOf('#');
+
+    if (otherPoundSign > 0) {
+      line = line.slice(0, otherPoundSign).trimEnd();
+    }
+
+    if (line[0] === '.') {
+      this.addDomainSuffix(line);
+    } else {
+      this.domainTrie.add(line);
+    }
+  }
+
   private async addFromDomainsetPromise(source: MaybePromise<AsyncIterable<string> | Iterable<string> | string[]>) {
-    for await (let line of await source) {
-      const otherPoundSign = line.lastIndexOf('#');
-
-      if (otherPoundSign > 0) {
-        line = line.slice(0, otherPoundSign).trimEnd();
+    const resolved = await source;
+    // `for await` over a plain array still yields to the microtask queue once
+    // per element; the parsed remote lists are hundreds of thousands of lines
+    if (Array.isArray(resolved)) {
+      for (let i = 0, len = resolved.length; i < len; i++) {
+        this.addDomainsetLine(resolved[i]);
       }
-
-      if (line[0] === '.') {
-        this.addDomainSuffix(line);
-      } else {
-        this.domainTrie.add(line);
-      }
+      return;
+    }
+    for await (const line of resolved) {
+      this.addDomainsetLine(line);
     }
   }
 
@@ -463,10 +482,12 @@ export class FileOutput {
   }
 
   write(): Promise<unknown> {
-    return this.span.traceChildAsync('write all', async (childSpan) => {
-      await childSpan.traceChildAsync('done', () => this.done());
+    return this.parentSpan.traceChildAsync('RuleOutput#' + this.id, async (childSpan) => {
+      // pendingPromise is the (untraced) reading + parsing of every source added
+      // via addFromRuleset / addFromDomainset, so this is waiting on fs + compute
+      await childSpan.traceChildAsync('done', () => this.done(), SpanCategory.Wait);
 
-      const domains = childSpan.traceChildSync('dump domain trie', () => this.dumpDomains());
+      const domains = childSpan.traceChildSync('dump domain trie', () => this.dumpDomains(), SpanCategory.Compute);
 
       const title = nullthrow(this.title, 'Missing title');
       const descriptions = nullthrow(this.description, 'Missing description');
@@ -485,8 +506,8 @@ export class FileOutput {
       // synchronously so no completion ever waits on a busy main thread.
       //
       // Only worth doing from the main thread -- tasks that already run entirely on
-      // a worker (build-microsoft-cdn, build-telegram-cidr, build-cdn-download-conf)
-      // are not contending with anything, and must not spawn a nested worker farm.
+      // a worker (build-microsoft-cdn, build-cdn-download-conf) are not contending
+      // with anything, and must not spawn a nested worker farm.
       if (isMainThread && domains.length >= OUTPUT_WORKER_THRESHOLD) {
         this.guardBeforeWritingToStrategies();
 
@@ -501,11 +522,11 @@ export class FileOutput {
 
         return childSpan.traceWorkerChild(
           'write via output worker',
-          rawSpan => getOutputWorkerFarm().writeOutput(rawSpan, payload)
+          rawSpan => getBuildWorkerFarm().writeOutput(rawSpan, payload)
         );
       }
 
-      childSpan.traceChildSync('write to strategies', () => this.writeToStrategies(domains));
+      childSpan.traceChildSync('write to strategies', () => this.writeToStrategies(domains), SpanCategory.Compute);
 
       return childSpan.traceChildAsync('output to disk', (childSpan) => {
         const promises: Array<Promise<void>> = [];
@@ -521,7 +542,8 @@ export class FileOutput {
               isMainThread
                 ? strategy.output(childSpan, title, descriptions, this.date, filePath)
                 : strategy.outputInWorker(childSpan, title, descriptions, this.date, filePath)
-            ))
+            // self time here is banner + content hash; compare / writing are traced as children
+            ), SpanCategory.Compute)
           );
         }
 
