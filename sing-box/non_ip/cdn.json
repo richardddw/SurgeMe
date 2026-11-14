@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "rules": [
+    {
+      "domain": [
+        "7h15.ru1353t.1s.m4d3.by.5ukk4w.skk.moe",
+        "cdn-msp.jmcomic.me",
+        "cdn-msp.18comic.org",
+        "cdn-msp.18comic.vip",
+        "cdn-msp.jmcomic-zzz.one"
+      ],
+      "domain_suffix": ["7h15.ru1353t.1s.m4d3.by.5ukk4w.skk.moe"],
+      "domain_keyword": [
+        "-files.gitbook.io",
+        "vod-adaptive.akamaized.net",
+        "web-assets.zendesk",
+        "-res.cloudinary.com",
+        "dsn.algolia.net",
+        "-thumbs.pornhost.com",
+        "-cdn.eporner.com",
+        "cdn.adultempire.com",
+        "-assets.dmm.co.jp",
+        "static.trustpilot.com",
+        "scripts.trustpilot.com",
+        "images.trustpilot.com",
+        "cdn.trustpilot.net",
+        "assets.trustpilot.net",
+        "images.trustpilot.net",
+        "-assets.worldsex.com",
+        "-thumbs.worldsex.com",
+        "99avcdn",
+        "-images.disco-api.com",
+        "static.grammarly.com"
+      ]
+    }
+  ]
+}

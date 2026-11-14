@@ -1,0 +1,27 @@
+#!name=[Sukka] URL Redirect (Minimum)
+#!desc=Last Updated: 2026-03-10T05:42:43.122Z Size: 16
+# This module only contains rules that doesn't work with/hasn't migrated to uBlock Origin's "uritransform" filter syntax
+# uBO/AdGuard filter can be found at https://ruleset.skk.moe/Internal/sukka_ubo_url_redirect_filters.txt
+# This reduces mitm-hostnames and improves performance, with the tradeoff of uBO/AdGuard filter only cover mostly in browser.
+
+[MITM]
+hostname = %APPEND% raw.gitmirror.com, gist.gitmirror.com, raw.githubusercontents.com, gist.githubusercontents.com, cdn.gitmirror.com, raw.fastgit.org, raw.kgithub.com, raw.kkgithub.com, unpkg.com, google.cn, www.google.cn, g.cn, ditu.google.cn, maps.google.cn, www.g.cn, acg.tv
+
+[URL Rewrite]
+^https?://raw\.gitmirror\.com/(.*) https://raw.githubusercontent.com/$1 header
+^https?://gist\.gitmirror\.com/(.*) https://gist.githubusercontent.com/$1 header
+^https?://raw\.githubusercontents\.com/(.*) https://raw.githubusercontent.com/$1 header
+^https?://gist\.githubusercontents\.com/(.*) https://gist.githubusercontent.com/$1 header
+^https?://cdn\.gitmirror\.com/(.*) https://cdn.statically.io/$1 header
+^https?://raw\.fastgit\.org/(.*) https://raw.githubusercontent.com/$1 header
+^https?://raw\.kgithub\.com/(.*) https://raw.githubusercontent.com/$1 header
+^https?://raw\.kkgithub\.com/(.*) https://raw.githubusercontent.com/$1 header
+^https?://unpkg\.com/(.*) https://cdn.jsdelivr.net/npm/$1 header
+^https?://google\.cn/(.*) https://google.com/$1 307
+^https?://www\.google\.cn/(.*) https://www.google.com/$1 307
+^https?://g\.cn/(.*) https://google.com/$1 307
+^https?://ditu\.google\.cn/(.*) https://maps.google.com/$1 307
+^https?://maps\.google\.cn/(.*) https://maps.google.com/$1 307
+^https?://www\.g\.cn/(.*) https://www.google.com/$1 307
+^https?://acg\.tv/sm(.*) https://www.nicovideo.jp/watch/sm$1 307
+^https?://acg\.tv/(.*) https://b23.tv/$1 307
